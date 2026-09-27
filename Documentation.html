@@ -1,0 +1,3167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terminal Chess — Architecture &amp; Rules Engine Documentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #eeede3;
+    --paper-raised: #f8f7f1;
+    --ink: #20241f;
+    --ink-soft: #52584c;
+    --forest: #2f3b2e;
+    --forest-deep: #1c241b;
+    --brass: #8c6a22;
+    --brass-soft: #cbab63;
+    --rule: #d6d2c3;
+    --rule-strong: #b9b39d;
+    --code-bg: #1b1e19;
+    --code-text: #e7e4d8;
+    --code-border: #363b31;
+    --note-bg: #e4e6dc;
+    --font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, 'Liberation Mono', monospace;
+    --measure: 42rem;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-serif);
+    font-size: 18px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--brass); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:hover { color: var(--forest); }
+  a:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--brass);
+    outline-offset: 2px;
+  }
+
+  /* ---------- Layout shell ---------- */
+
+  .shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 3rem;
+  }
+
+  header.hero {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 2.5rem;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .hero-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2.5rem;
+    align-items: start;
+  }
+
+  h1.title {
+    font-family: var(--font-serif);
+    font-weight: 700;
+    font-size: 2.6rem;
+    line-height: 1.15;
+    margin: 0 0 1rem;
+    letter-spacing: -0.01em;
+    color: var(--forest-deep);
+  }
+
+  .ai-note {
+    display: inline-block;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+    border-left: 3px solid var(--brass-soft);
+    padding: 0.35rem 0 0.35rem 0.8rem;
+    margin: 0 0 1.5rem;
+    font-style: italic;
+  }
+
+  .lede {
+    font-size: 1.15rem;
+    color: var(--ink-soft);
+    max-width: 40rem;
+    margin: 0 0 1.25rem;
+  }
+
+  .hero-meta {
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--rule);
+    padding-top: 0.9rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.3rem;
+  }
+
+  .board-window {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 6px;
+    overflow: hidden;
+    justify-self: end;
+    width: 340px;
+  }
+
+  .board-window .bar {
+    display: flex;
+    gap: 6px;
+    padding: 9px 10px;
+    background: #14160f;
+    border-bottom: 1px solid var(--code-border);
+  }
+
+  .board-window .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #4c4f43;
+  }
+
+  .board-window pre {
+    margin: 0;
+    padding: 14px 16px 16px;
+    font-family: var(--font-mono);
+    font-size: 12.6px;
+    line-height: 1.5;
+    color: var(--code-text);
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  /* ---------- Sidebar / TOC ---------- */
+
+  nav.toc {
+    position: sticky;
+    top: 1.5rem;
+    align-self: start;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
+    padding: 1.75rem 0 2rem;
+    font-size: 0.92rem;
+  }
+
+  nav.toc h2 {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    margin: 0 0 0.9rem;
+    font-weight: 500;
+  }
+
+  nav.toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    counter-reset: toc;
+  }
+
+  nav.toc > ol > li {
+    counter-increment: toc;
+    margin-bottom: 0.55rem;
+  }
+
+  nav.toc > ol > li > a {
+    display: block;
+    color: var(--ink);
+    text-decoration: none;
+    line-height: 1.4;
+  }
+
+  nav.toc > ol > li > a::before {
+    content: counter(toc) ". ";
+    color: var(--brass);
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+  }
+
+  nav.toc > ol > li > a:hover { color: var(--brass); }
+
+  nav.toc ol ol {
+    margin: 0.3rem 0 0.4rem 1.35rem;
+    border-left: 1px solid var(--rule);
+    padding-left: 0.7rem;
+  }
+
+  nav.toc ol ol li { margin-bottom: 0.3rem; }
+  nav.toc ol ol li a {
+    color: var(--ink-soft);
+    text-decoration: none;
+    font-size: 0.93em;
+  }
+  nav.toc ol ol li a:hover { color: var(--brass); }
+
+  /* ---------- Main content ---------- */
+
+  main {
+    min-width: 0;
+    padding: 2.5rem 0 6rem;
+  }
+
+  main > section {
+    max-width: var(--measure);
+    padding-top: 2.6rem;
+    margin-top: 2.6rem;
+    border-top: 1px solid var(--rule);
+  }
+
+  main > section:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+
+  h2.section-title {
+    font-size: 1.9rem;
+    color: var(--forest-deep);
+    margin: 0 0 0.3rem;
+    line-height: 1.25;
+  }
+
+  .section-number {
+    font-family: var(--font-mono);
+    color: var(--brass);
+    font-size: 1rem;
+    display: block;
+    margin-bottom: 0.35rem;
+  }
+
+  h3 {
+    font-size: 1.35rem;
+    color: var(--forest);
+    margin: 2.2rem 0 0.7rem;
+  }
+
+  h4 {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    color: var(--ink);
+    background: var(--paper-raised);
+    border: 1px solid var(--rule);
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    margin: 1.6rem 0 0.8rem;
+  }
+
+  p { margin: 0 0 1.05rem; max-width: var(--measure); }
+  ul, ol { margin: 0 0 1.1rem; padding-left: 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  strong { color: var(--forest-deep); }
+
+  code.inline {
+    font-family: var(--font-mono);
+    font-size: 0.87em;
+    background: var(--paper-raised);
+    border: 1px solid var(--rule);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    color: var(--forest-deep);
+  }
+
+  pre.code {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border: 1px solid var(--code-border);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
+    line-height: 1.55;
+    margin: 0 0 1.3rem;
+    max-width: var(--measure);
+  }
+
+  pre.code code { font-family: inherit; background: none; border: none; padding: 0; color: inherit; }
+
+  .callout {
+    max-width: var(--measure);
+    background: var(--note-bg);
+    border: 1px solid var(--rule-strong);
+    border-left: 4px solid var(--forest);
+    border-radius: 4px;
+    padding: 1rem 1.3rem;
+    margin: 0 0 1.3rem;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .label {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--forest);
+    display: block;
+    margin-bottom: 0.4rem;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    max-width: 56rem;
+    margin: 0 0 1.5rem;
+    font-size: 0.93rem;
+  }
+  caption { text-align: left; font-style: italic; color: var(--ink-soft); margin-bottom: 0.5rem; }
+  th, td {
+    text-align: left;
+    padding: 0.55rem 0.8rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    font-weight: 500;
+    border-bottom: 2px solid var(--rule-strong);
+  }
+  td code.inline, th code.inline { white-space: nowrap; }
+
+  .diagram {
+    max-width: var(--measure);
+    background: var(--paper-raised);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 1.3rem 1.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: var(--ink-soft);
+    margin: 0 0 1.3rem;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .steps { padding-left: 0; list-style: none; counter-reset: step; }
+  .steps > li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 2.6rem;
+    margin-bottom: 1.3rem;
+  }
+  .steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 0.05rem;
+    width: 1.8rem; height: 1.8rem;
+    border-radius: 50%;
+    border: 1px solid var(--forest);
+    color: var(--forest);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .steps h4 { margin-top: 0; }
+
+  footer.page-footer {
+    max-width: var(--measure);
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    border-top: 1px solid var(--rule);
+    padding-top: 1.5rem;
+    margin-top: 3rem;
+  }
+
+  details.mobile-toc { display: none; }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    nav.toc.desktop-toc { display: none; }
+    details.mobile-toc {
+      display: block;
+      margin: 1.5rem 1.5rem 0;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: var(--paper-raised);
+    }
+    details.mobile-toc summary {
+      cursor: pointer;
+      padding: 0.8rem 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--forest);
+    }
+    details.mobile-toc .toc-body { padding: 0 1rem 1rem; }
+    .hero-inner { grid-template-columns: 1fr; }
+    .board-window { justify-self: start; width: 100%; max-width: 340px; }
+    h1.title { font-size: 2.1rem; }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14140f;
+      --paper-raised: #1c1c15;
+      --ink: #e9e7db;
+      --ink-soft: #a9a693;
+      --forest: #8fb98d;
+      --forest-deep: #cfe8cd;
+      --brass: #d3ac5f;
+      --brass-soft: #6a5326;
+      --rule: #333226;
+      --rule-strong: #46442f;
+      --note-bg: #1e2119;
+      --code-bg: #0c0d09;
+      --code-text: #e7e4d8;
+      --code-border: #2c2e25;
+    }
+    body { background: var(--paper); }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div>
+      <h1 class="title">Terminal Chess<br>Architecture &amp; Rules Engine Documentation</h1>
+      <p class="ai-note">Phase 3 and the restructure of the whole project was done by AI.</p>
+      <p class="lede">
+        A from-scratch reference for a two-player, local, command-line chess game
+        written in plain Python: how the board is represented, how every piece's
+        legality is derived from first principles, how check, checkmate, stalemate,
+        castling, and en passant are detected, and how the game loop ties it all
+        together. Written to be studied line by line and rebuilt from nothing.
+      </p>
+      <ul class="hero-meta">
+        <li>Language: Python 3, standard library only</li>
+        <li>Files: <code class="inline">board.py</code> · <code class="inline">pieces.py</code> · <code class="inline">errors.py</code> · <code class="inline">main.py</code></li>
+        <li>Interface: text terminal, no dependencies</li>
+      </ul>
+    </div>
+    <div class="board-window" aria-hidden="true">
+      <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+      <pre>     A  B  C  D  E  F  G  H
+  +==========================+
+8 |  r  n  b  q  k  b  n  r  | 8
+7 |  p  p  p  p  p  p  p  p  | 7
+6 |  0  0  0  0  0  0  0  0  | 6
+5 |  0  0  0  0  0  0  0  0  | 5
+4 |  0  0  0  0  0  0  0  0  | 4
+3 |  0  0  0  0  0  0  0  0  | 3
+2 |  P  P  P  P  P  P  P  P  | 2
+1 |  R  N  B  Q  K  B  N  R  | 1
+  +==========================+
+     A  B  C  D  E  F  G  H</pre>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+
+<details class="mobile-toc">
+  <summary>Table of contents</summary>
+  <div class="toc-body">
+<ol>
+    <li><a href="#overview">What This Project Is</a></li>
+    <li><a href="#architecture">Project Architecture</a></li>
+    <li><a href="#data-model">The Data Model</a></li>
+    <li>
+      <a href="#board-py">board.py — State &amp; Rendering</a>
+      <ol>
+        <li><a href="#create-starting-board">create_starting_board()</a></li>
+        <li><a href="#clear-screen">clear_screen()</a></li>
+        <li><a href="#print-board">print_board()</a></li>
+        <li><a href="#clone-board">clone_board()</a></li>
+      </ol>
+    </li>
+    <li><a href="#errors-py">errors.py — Message Constants</a></li>
+    <li>
+      <a href="#pieces-py">pieces.py — The Rules Engine</a>
+      <ol>
+        <li><a href="#coords-and-color">Coordinates &amp; color</a></li>
+        <li><a href="#geometry-helpers">Geometry helpers</a></li>
+        <li><a href="#movement-legality">can_piece_reach</a></li>
+        <li><a href="#pawn-logic">pawn_check</a></li>
+        <li><a href="#check-detection">Check detection</a></li>
+        <li><a href="#simulating-moves">Simulating moves safely</a></li>
+        <li><a href="#castling">Castling</a></li>
+        <li><a href="#is-legal-move">is_legal_move</a></li>
+        <li><a href="#checkmate-stalemate">Checkmate &amp; stalemate</a></li>
+        <li><a href="#notation">Algebraic notation</a></li>
+      </ol>
+    </li>
+    <li>
+      <a href="#main-py">main.py — The Game Loop</a>
+      <ol>
+        <li><a href="#main-imports">State &amp; setup</a></li>
+        <li><a href="#main-loop">Single-frame render loop</a></li>
+        <li><a href="#main-commands">Commands</a></li>
+        <li><a href="#move-pipeline">The move pipeline</a></li>
+        <li><a href="#save-load-undo">Save, load &amp; history</a></li>
+        <li><a href="#error-handling">Error handling</a></li>
+      </ol>
+    </li>
+    <li><a href="#rules-reference">Chess Rules Reference</a></li>
+    <li><a href="#bugs-fixed">What Was Broken &amp; Fixed</a></li>
+    <li><a href="#rebuild-guide">Rebuilding From Zero</a></li>
+    <li><a href="#function-index">Appendix: Function Index</a></li>
+    <li><a href="#extensions">Where To Go From Here</a></li>
+
+  </ol>
+  </div>
+</details>
+
+<nav class="toc desktop-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#overview">What This Project Is</a></li>
+    <li><a href="#architecture">Project Architecture</a></li>
+    <li><a href="#data-model">The Data Model</a></li>
+    <li>
+      <a href="#board-py">board.py — State &amp; Rendering</a>
+      <ol>
+        <li><a href="#create-starting-board">create_starting_board()</a></li>
+        <li><a href="#clear-screen">clear_screen()</a></li>
+        <li><a href="#print-board">print_board()</a></li>
+        <li><a href="#clone-board">clone_board()</a></li>
+      </ol>
+    </li>
+    <li><a href="#errors-py">errors.py — Message Constants</a></li>
+    <li>
+      <a href="#pieces-py">pieces.py — The Rules Engine</a>
+      <ol>
+        <li><a href="#coords-and-color">Coordinates &amp; color</a></li>
+        <li><a href="#geometry-helpers">Geometry helpers</a></li>
+        <li><a href="#movement-legality">can_piece_reach</a></li>
+        <li><a href="#pawn-logic">pawn_check</a></li>
+        <li><a href="#check-detection">Check detection</a></li>
+        <li><a href="#simulating-moves">Simulating moves safely</a></li>
+        <li><a href="#castling">Castling</a></li>
+        <li><a href="#is-legal-move">is_legal_move</a></li>
+        <li><a href="#checkmate-stalemate">Checkmate &amp; stalemate</a></li>
+        <li><a href="#notation">Algebraic notation</a></li>
+      </ol>
+    </li>
+    <li>
+      <a href="#main-py">main.py — The Game Loop</a>
+      <ol>
+        <li><a href="#main-imports">State &amp; setup</a></li>
+        <li><a href="#main-loop">Single-frame render loop</a></li>
+        <li><a href="#main-commands">Commands</a></li>
+        <li><a href="#move-pipeline">The move pipeline</a></li>
+        <li><a href="#save-load-undo">Save, load &amp; history</a></li>
+        <li><a href="#error-handling">Error handling</a></li>
+      </ol>
+    </li>
+    <li><a href="#rules-reference">Chess Rules Reference</a></li>
+    <li><a href="#bugs-fixed">What Was Broken &amp; Fixed</a></li>
+    <li><a href="#rebuild-guide">Rebuilding From Zero</a></li>
+    <li><a href="#function-index">Appendix: Function Index</a></li>
+    <li><a href="#extensions">Where To Go From Here</a></li>
+
+  </ol>
+</nav>
+
+<main>
+<section id="overview">
+<span class="section-number">01</span>
+<h2 class="section-title">What This Project Is</h2>
+
+<p>
+This is a two-player chess game that runs entirely in a terminal. There is no
+graphics library, no board image, and no network code. Two people share one
+keyboard: White types a move, then Black types a move, back and forth, until
+someone wins, the game is drawn, or someone quits. The entire "board" is a
+grid of letters printed as text, and the entire "engine" is a set of plain
+functions that answer one question over and over: <em>given this position,
+is this specific move allowed?</em>
+</p>
+
+<p>
+That narrowness is the point. A full chess engine that searches for the best
+move is a hard problem. A chess <strong>rules implementation</strong> — one that
+enforces the rules correctly and refuses illegal moves — is a much smaller,
+much more approachable problem, and it is a genuinely good exercise for
+learning how to translate a real-world rule book into code. Every rule in
+this document ("a bishop moves diagonally," "you cannot castle out of
+check," "an en passant capture must happen immediately") maps to a specific
+`if` statement somewhere in <code class="inline">pieces.py</code>. Reading this
+project end to end is reading the rules of chess translated, one clause at a
+time, into Python.
+</p>
+
+<h3>Design goals</h3>
+<p>The project is organized around four goals, in priority order:</p>
+<ul>
+  <li><strong>Correctness over cleverness.</strong> There is no bitboard
+  representation, no move generation optimization, no opening book. Every
+  function reads like the rule it enforces. A slower, obviously-correct
+  check is worth more here than a fast, subtle one — because the entire
+  value of a rules engine is that it never lets an illegal move through.</li>
+  <li><strong>One job per file.</strong> The board doesn't know what a legal
+  move is. The rules engine doesn't know how to print anything or ask the
+  user a question. The game loop doesn't know how a knight moves. This
+  separation is what makes each piece of the system readable and testable
+  on its own, and it's the first architectural decision explained in
+  detail in <a href="#architecture">Section 2</a>.</li>
+  <li><strong>Say what went wrong, in one place.</strong> Every rejected
+  move produces a specific, human-readable reason ("Bishops can only move
+  diagonally," not just "illegal move"). Centralizing those strings in
+  <code class="inline">errors.py</code> means the wording is consistent and
+  there is exactly one place to change it. See <a href="#errors-py">Section
+  5</a>.</li>
+  <li><strong>A calm terminal.</strong> The screen redraws to a single,
+  current board each turn instead of scrolling a transcript of every board
+  that has ever existed in the game. See <a href="#main-py">Section 7.2</a>
+  for how that's done without losing any feedback messages.</li>
+</ul>
+
+<div class="callout">
+<span class="label">Why build this instead of using a chess library</span>
+<p>
+Libraries like <code class="inline">python-chess</code> already solve this
+problem, extremely well. The reason to build it anyway is the same reason a
+student derives a formula instead of only memorizing it: writing your own
+<code class="inline">is_legal_move</code> forces you to actually decide, for
+every piece, in every situation, what "legal" means — including the
+uncomfortable edge cases (a pinned piece, a king that would castle through
+check, a pawn that can only capture one specific square for exactly one
+turn) that a library quietly handles for you. This document exists so that
+decision-making is visible and repeatable.
+</p>
+</div>
+</section>
+<section id="architecture">
+<span class="section-number">02</span>
+<h2 class="section-title">Project Architecture</h2>
+
+<p>
+The project is split into four files. Each one has exactly one
+responsibility, and the dependency direction only ever points one way: the
+game loop depends on the rules engine, the rules engine depends on the board
+representation, and the error messages are leaf data that everything else
+can import without creating a loop.
+</p>
+
+<div class="diagram" role="img" aria-label="Dependency diagram of the four modules">
+  main.py  (the game loop: reads input, drives everything)
+    │  imports
+    ▼
+  pieces.py  (the rules engine: is this move legal? is this check?)
+    │  imports
+    ▼
+  board.py  (the board: what a position looks like, how to print it)
+
+  errors.py (message text)  ← imported directly by both main.py and pieces.py
+</div>
+
+<p>
+Nothing in <code class="inline">board.py</code> knows that chess rules exist —
+it would be equally happy representing checkers or a grid of arbitrary
+symbols. Nothing in <code class="inline">pieces.py</code> knows that a human
+is typing at a keyboard, or that a terminal exists at all; it only ever
+receives a board (a list of lists) and coordinates (plain integers) and
+returns a yes/no answer plus a reason. <code class="inline">main.py</code> is
+the only file that knows about <code class="inline">input()</code>,
+<code class="inline">print()</code>, saved files, and the sequence of a
+turn. This means you could reuse <code class="inline">pieces.py</code>
+unchanged to build a completely different interface — a web UI, a
+graphical board, an automated test suite — without touching a single rule.
+</p>
+
+<h3>What happens during one turn</h3>
+<p>
+Before diving into each file, it helps to see the whole turn end to end,
+because every section after this one is really just a detailed explanation
+of one box in this sequence:
+</p>
+<div class="diagram" role="img" aria-label="Sequence of events for a single move">
+1.  main.py clears the screen and prints the current board
+2.  main.py reads a line of text from the player ("e2e4")
+3.  pieces.py parses that text into (start_row, start_col, end_row, end_col)
+4.  pieces.py checks: is there a piece there, is it this player's turn,
+    does the piece's shape/path allow this move (or is it a castle / an
+    en passant capture), and — critically — would the move leave the
+    player's own king in check?
+5.  main.py applies the move to the board, moves the rook if it was a
+    castle, removes the captured pawn if it was en passant, and asks for
+    a promotion choice if a pawn reached the last rank
+6.  pieces.py checks whether the OTHER player is now in check, and if so,
+    whether they have any legal reply at all (checkmate) — or, if not in
+    check, whether they have any legal move at all (stalemate)
+7.  pieces.py turns the move into algebraic notation ("e4", "Nf3+", "O-O")
+8.  main.py appends that notation to the history and loops back to step 1
+</div>
+
+<p>
+Two design decisions fall out of that sequence, and both come up repeatedly
+in the rest of this document:
+</p>
+<ul>
+  <li><strong>The rules engine never mutates the real board to check
+  something.</strong> Whenever it needs to answer "what if this move
+  happened," it clones the board, applies the hypothetical move to the
+  clone, inspects the clone, and throws it away. This is how self-check
+  prevention works (<a href="#simulating-moves">Section 6.6</a>) and it is
+  the single most important trick in the whole codebase.</li>
+  <li><strong>"Is this legal" and "do it" are separate steps.</strong>
+  <code class="inline">is_legal_move</code> never changes the board. Only
+  <code class="inline">main.py</code>'s move-processing block, after
+  legality has already been confirmed, is allowed to mutate the real board.
+  Keeping "decide" and "act" apart is what makes it safe to call
+  <code class="inline">is_legal_move</code> speculatively, thousands of
+  times, while just scanning for whether <em>any</em> legal move exists —
+  which is exactly what checkmate and stalemate detection do.</li>
+</ul>
+</section>
+<section id="data-model">
+<span class="section-number">03</span>
+<h2 class="section-title">The Data Model: Representing a Chess Board</h2>
+
+<p>
+Every decision the rules engine makes starts from one data structure: the
+board is a plain Python list of 8 lists, each containing 8 one-character
+strings. There is no custom <code class="inline">Piece</code> class, no
+<code class="inline">Square</code> object, no board library. This is
+deliberate — a list of lists is the simplest structure that can answer
+"what is on this square" in constant time, and simplicity here means every
+other function can stay simple too.
+</p>
+
+<h3>Encoding a square</h3>
+<table>
+<caption>How a single character on the board is interpreted</caption>
+<thead><tr><th>Value</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code class="inline">"0"</code></td><td>An empty square (the digit zero, chosen because it's a single visible character, unlike a blank space)</td></tr>
+<tr><td>Uppercase letter (<code class="inline">K Q R B N P</code>)</td><td>A White piece</td></tr>
+<tr><td>Lowercase letter (<code class="inline">k q r b n p</code>)</td><td>A Black piece</td></tr>
+</tbody>
+</table>
+<p>
+This is the same idea behind FEN (Forsyth–Edwards Notation), the standard
+text format for chess positions: case carries color, so a single character
+can identify both the piece type and which side owns it. It also makes
+<code class="inline">piece.isupper()</code> a complete, one-line color
+check, which <code class="inline">color_check</code> relies on directly
+(<a href="#color-check">Section 6.1</a>).
+</p>
+
+<h3>Rows, columns, and why row 0 is the top of the board</h3>
+<p>
+The board is indexed as <code class="inline">board[row][col]</code>, and the
+starting layout fixes what those indices mean:
+</p>
+<ul>
+  <li><strong>Row 0</strong> is Black's home rank (rank 8 in chess
+  notation) — it's the first inner list in <code class="inline">create_starting_board</code>, so it prints at the <em>top</em> of the board.</li>
+  <li><strong>Row 7</strong> is White's home rank (rank 1).</li>
+  <li><strong>Column 0</strong> is the A-file; <strong>column 7</strong> is the H-file.</li>
+</ul>
+<p>
+In other words, row number and chess rank move in opposite directions: rank
+8 is row 0, rank 1 is row 7. That single inversion (<code class="inline">row
+= 8 - rank</code>) is the thing to hold in your head while reading
+<code class="inline">read_coordinate</code> and <code class="inline">square_name</code> in the next section — everywhere else in the codebase
+only ever deals in row/col, never rank/file, specifically so this
+conversion only has to happen in one place.
+</p>
+
+<div class="diagram" role="img" aria-label="Coordinate mapping table">
+       col:    0    1    2    3    4    5    6    7
+       file:   A    B    C    D    E    F    G    H
+row 0  rank 8  r    n    b    q    k    b    n    r
+row 1  rank 7  p    p    p    p    p    p    p    p
+row 2  rank 6  0    0    0    0    0    0    0    0
+row 3  rank 5  0    0    0    0    0    0    0    0
+row 4  rank 4  0    0    0    0    0    0    0    0
+row 5  rank 3  0    0    0    0    0    0    0    0
+row 6  rank 2  P    P    P    P    P    P    P    P
+row 7  rank 1  R    N    B    Q    K    B    N    R
+</div>
+
+<h3>Why a full clone instead of an "undo" of one square</h3>
+<p>
+Two different mechanisms in this project need a copy of the board: the undo
+stack (so a move can be reversed) and hypothetical-move simulation (so a
+move can be tested for self-check without touching the real game). Both use
+<code class="inline">clone_board</code>, which is <code class="inline">copy.deepcopy</code> under the hood
+(<a href="#clone-board">Section 4.4</a>). A shallow copy would not be safe
+here — copying only the outer list would produce eight new row-lists
+pointing at the very same inner lists as the original board, so "editing the
+copy" would silently edit the real board too. Deep-copying trades a small
+amount of speed for the guarantee that a cloned board is a completely
+independent universe.
+</p>
+
+<h3>Castling rights and the en passant target: the two pieces of state a board alone can't hold</h3>
+<p>
+A board tells you where the pieces are <em>right now</em>, but two legal
+chess rules depend on <em>history</em> that a snapshot of the current
+position cannot contain:
+</p>
+<ul>
+  <li>Castling is only legal if the king and that specific rook have
+  <em>never moved</em> — not just that they happen to be on their starting
+  squares this instant. A king that moved to b1 and came back to e1 has lost
+  the right to castle, even though the board looks identical to a king that
+  never moved.</li>
+  <li>En passant is only legal on the <em>very next move</em> after an enemy
+  pawn advances two squares. One turn later, the opportunity is gone, even
+  though the pawn is sitting on exactly the same square it would occupy if
+  it had only ever moved one square at a time.</li>
+</ul>
+<p>
+Both of these are represented as extra state carried alongside the board,
+not derived from it:
+</p>
+<ul>
+  <li><code class="inline">castling_rights</code> — a dictionary of
+  dictionaries, <code class="inline">{"White": {"K": True, "Q": True},
+  "Black": {"K": True, "Q": True}}</code>, where <code class="inline">"K"</code> means the kingside right and <code class="inline">"Q"</code> the
+  queenside right. It starts all <code class="inline">True</code> and can
+  only ever be flipped to <code class="inline">False</code> — see
+  <code class="inline">update_castling_rights</code> in
+  <a href="#castling">Section 6.7</a>.</li>
+  <li><code class="inline">en_passant_target</code> — either
+  <code class="inline">None</code>, or the single <code class="inline">(row, col)</code> square a pawn could capture onto <em>right now</em>. It is
+  recalculated after every single move and almost always resets to
+  <code class="inline">None</code> — it is only non-<code class="inline">None</code> for the one turn immediately following a
+  two-square pawn advance.</li>
+</ul>
+<p>
+Both live in <code class="inline">main.py</code> as ordinary local variables,
+get threaded through into <code class="inline">is_legal_move</code> as
+optional parameters, and get saved and restored by the undo stack and the
+save/load system right alongside the board itself — because, as far as the
+rules are concerned, they <em>are</em> part of the game's state, even though
+they're not drawn on the board.
+</p>
+</section>
+<section id="board-py">
+<span class="section-number">04</span>
+<h2 class="section-title">board.py — State, Rendering, and the Terminal</h2>
+<p>
+This is the smallest file in the project, and deliberately so. It has four
+functions, and none of them know anything about chess rules — only about
+what a board looks like and how to draw one.
+</p>
+
+<h4 id="create-starting-board">create_starting_board()</h4>
+<pre class="code"><code>def create_starting_board():
+    return [
+        [&quot;r&quot;, &quot;n&quot;, &quot;b&quot;, &quot;q&quot;, &quot;k&quot;, &quot;b&quot;, &quot;n&quot;, &quot;r&quot;],
+        [&quot;p&quot;, &quot;p&quot;, &quot;p&quot;, &quot;p&quot;, &quot;p&quot;, &quot;p&quot;, &quot;p&quot;, &quot;p&quot;],
+        [&quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;],
+        [&quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;],
+        [&quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;],
+        [&quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;, &quot;0&quot;],
+        [&quot;P&quot;, &quot;P&quot;, &quot;P&quot;, &quot;P&quot;, &quot;P&quot;, &quot;P&quot;, &quot;P&quot;, &quot;P&quot;],
+        [&quot;R&quot;, &quot;N&quot;, &quot;B&quot;, &quot;Q&quot;, &quot;K&quot;, &quot;B&quot;, &quot;N&quot;, &quot;R&quot;],
+    ]</code></pre><p>
+This function returns a brand-new board, hard-coded to the standard chess
+starting position. Reading it top to bottom, row 0 is Black's back rank
+(rook, knight, bishop, queen, king, bishop, knight, rook — the traditional
+order), row 1 is Black's pawns, rows 2 through 5 are the four empty ranks in
+the middle of the board, row 6 is White's pawns, and row 7 is White's back
+rank. Notice the symmetry: White's row (row 7) uses the exact same
+piece-order string as Black's row (row 0), just uppercase — because, as
+established in <a href="#data-model">Section 3</a>, case alone is what
+separates the two colors.
+</p>
+<p>
+A fresh list is built and returned every time this function is called (there
+is no shared, mutable "default board" sitting around as a module-level
+constant), which matters the moment you start a new game after a previous
+one ended — <code class="inline">main.py</code> calls this once, at the very
+top of <code class="inline">main()</code>, to get a completely independent
+board with no risk of leftover state from a previous game.
+</p>
+
+<h4 id="clear-screen">clear_screen()</h4>
+<pre class="code"><code>def clear_screen():
+    &quot;&quot;&quot;Clear the terminal so only the current board is ever on screen.&quot;&quot;&quot;
+    os.system(&quot;cls&quot; if os.name == &quot;nt&quot; else &quot;clear&quot;)</code></pre><p>
+This function exists to solve exactly one problem: without it, every turn's
+<code class="inline">print_board</code> call would print a brand new board
+<em>underneath</em> the previous one, and the terminal would fill up with a
+scrolling transcript of every board position that has ever existed in the
+game — the very problem this rewrite specifically set out to fix.
+</p>
+<p>
+<code class="inline">os.system("cls" if os.name == "nt" else "clear")</code>
+shells out to the operating system's own screen-clearing command:
+<code class="inline">cls</code> on Windows (<code class="inline">os.name == "nt"</code>), <code class="inline">clear</code> everywhere
+else (Linux, macOS). This is simpler and more portable across real terminal
+emulators than trying to hand-craft the equivalent ANSI escape codes
+directly, and it's a single function so the "how do I clear the screen"
+decision is made in exactly one place.
+</p>
+<div class="callout">
+<span class="label">Why clearing the screen isn't enough on its own</span>
+<p>
+Calling this at the top of the game loop, by itself, would create a new bug:
+any message printed <em>after</em> the board on one turn (an error, a "you're
+in check" notice) would be wiped out by the very next screen clear before
+the player could ever read it, because nothing pauses between printing the
+message and looping back around. <a href="#main-loop">Section 7.2</a> covers
+the actual fix — collecting messages into a <code class="inline">status_message</code> variable and printing them
+<em>together with</em> the next board, right before the next input prompt,
+instead of printing them and immediately racing to clear them.
+</p>
+</div>
+
+<h4 id="print-board">print_board(board)</h4>
+<pre class="code"><code>def print_board(board):
+    print(&quot;     A  B  C  D  E  F  G  H&quot;)
+    print(&quot;  +==========================+&quot;)
+    row_label = 8
+    for row in board:
+        print(row_label, end=&quot; |  &quot;)
+        for square in row:
+            print(square, end=&quot;  &quot;)
+        print(&quot;|&quot;, row_label)
+        row_label -= 1
+    print(&quot;  +==========================+&quot;)
+    print(&quot;     A  B  C  D  E  F  G  H&quot;)</code></pre><p>
+This function is a straightforward nested loop, but it's worth tracing
+carefully because its output is the one thing every player looks at every
+single turn:
+</p>
+<ul>
+  <li>It prints a header row of file letters, then a top border made of
+  <code class="inline">=</code> characters framed by <code class="inline">+</code>.</li>
+  <li><code class="inline">row_label</code> starts at <code class="inline">8</code> and counts <em>down</em> as the loop walks
+  <em>forward</em> through <code class="inline">board</code> (row 0, row 1, row 2, …). This is the same row/rank inversion
+  from <a href="#data-model">Section 3</a> made visible: because
+  <code class="inline">board[0]</code> is rank 8, the very first row printed
+  must be labeled <code class="inline">8</code>, and the label has to count
+  down from there — which is exactly what <code class="inline">row_label -= 1</code> does at the end of each
+  iteration.</li>
+  <li>Inside each row, every square is printed with trailing spaces
+  (<code class="inline">end="  "</code>) so the columns stay aligned no
+  matter what character is being printed, then the rank number is printed
+  again on the right-hand side, mirroring the left-hand label so the board
+  can be read from either edge.</li>
+  <li>The file-letter header is printed both above and below the board, so
+  it's still visible without scrolling regardless of terminal height.</li>
+</ul>
+<p>
+This function only ever <em>reads</em> the board; it has no return value and
+causes no side effects other than writing to standard output. That
+one-directional flow (data in, text out, nothing changed) is what makes it
+safe to call as often as needed without any risk of it corrupting game
+state.
+</p>
+
+<h4 id="clone-board">clone_board(board)</h4>
+<pre class="code"><code>def clone_board(board):
+    return copy.deepcopy(board)</code></pre><p>
+One line, and arguably the most important line-count-to-importance ratio in
+the whole project. <code class="inline">copy.deepcopy</code> recursively
+copies both the outer list of rows <em>and</em> each inner row-list, so the
+result shares no mutable structure at all with the original board. As
+explained in <a href="#data-model">Section 3</a>, this is what makes it safe
+to use the result as a genuine "parallel universe" — a hypothetical board
+that can be freely mutated and thrown away, or a snapshot that can be pushed
+onto the undo stack and restored perfectly later, without either copy ever
+affecting the other.
+</p>
+</section>
+<section id="errors-py">
+<span class="section-number">05</span>
+<h2 class="section-title">errors.py — One Home for Every Message</h2>
+
+<p>
+Before this restructure, every rejection reason was a string literal typed
+directly at the point where it was needed — one copy of <code class="inline">"Bishops can only move diagonally"</code> inside the bishop's movement
+check, another copy of a similar-but-not-identical rook message inside the
+rook's check, and so on. That works until the wording needs to change, or
+until the same logical error needs to be raised from two different places
+and drifts slightly out of sync between them. Centralizing every message as
+a named constant fixes both problems: there is exactly one string per
+situation, it has a name that describes when it's used, and both
+<code class="inline">pieces.py</code> and <code class="inline">main.py</code>
+import the names they need instead of retyping the text.
+</p>
+
+<h4 id="errors-full">errors.py (complete)</h4>
+<pre class="code"><code>&quot;&quot;&quot;
+All user-facing messages for the chess game live here, so every other
+module imports them instead of typing its own copies of the strings.
+&quot;&quot;&quot;
+
+# --- Input parsing errors ---
+ERR_BAD_INPUT_LENGTH = (&quot;Input must be exactly 4 characters long (e.g., e2e4 or e2 e4). &quot;
+                         &quot;Type &#x27;help&#x27; to see other commands.&quot;)
+ERR_BAD_FILE = &quot;Invalid file used. Files must be letters A through H.&quot;
+ERR_BAD_RANK = &quot;Invalid rank used. Ranks must be numbers 1 through 8.&quot;
+ERR_UNEXPECTED = &quot;An unexpected error occurred: {error}&quot;
+
+# --- General move errors ---
+ERR_NO_PIECE = &quot;There is no piece on the starting square&quot;
+ERR_NOT_YOUR_TURN = &quot;It is {turn}&#x27;s turn right now. This is not your piece &gt;~&lt;&quot;
+ERR_NO_MOVEMENT = &quot;You have to actually move the piece somewhere &gt;~&lt;&quot;
+ERR_FRIENDLY_FIRE = &quot;You cannot capture your own piece :D&quot;
+ERR_SELF_CHECK = &quot;That move would leave your own king in check&quot;
+
+# --- Piece-specific movement errors ---
+ERR_KNIGHT_SHAPE = &quot;Knights must move in an L-shape&quot;
+ERR_KING_RANGE = &quot;Kings can only move 1 square in any direction (unless castling)&quot;
+ERR_ROOK_LINE = &quot;Rooks can only move in a straight horizontal or vertical line&quot;
+ERR_BISHOP_DIAGONAL = &quot;Bishops can only move diagonally&quot;
+ERR_QUEEN_LINE = &quot;Queens must move in a straight line or diagonally&quot;
+ERR_BLOCKED_PATH = &quot;There&#x27;s a piece in the way&quot;
+ERR_UNKNOWN_PIECE = &quot;Unknown piece type&quot;
+
+# --- Pawn errors ---
+ERR_PAWN_BLOCKED_FORWARD = &quot;Pawns cannot move forward into an occupied square&quot;
+ERR_PAWN_BLOCKED_DOUBLE = &quot;The path forward is blocked&quot;
+ERR_PAWN_BAD_DISTANCE = &quot;Pawns can only move 1 square forward (or 2 from their starting rank)&quot;
+ERR_PAWN_BAD_CAPTURE = &quot;Pawns can only move diagonally when capturing an enemy piece&quot;
+ERR_PAWN_INVALID = &quot;Invalid pawn movement trajectory.&quot;
+
+# --- Castling errors ---
+ERR_CASTLE_RIGHTS_LOST = (&quot;Cannot castle: you no longer have castling rights on that side &quot;
+                           &quot;(the king or that rook has already moved, or the rook was captured)&quot;)
+ERR_CASTLE_ROOK_MOVED = &quot;Cannot castle: there is no rook on that corner square&quot;
+ERR_CASTLE_PATH_BLOCKED = &quot;Cannot castle: there are pieces between the king and rook&quot;
+ERR_CASTLE_IN_CHECK = &quot;Cannot castle while in check&quot;
+ERR_CASTLE_THROUGH_CHECK = &quot;Cannot castle through a square that is under attack&quot;
+ERR_CASTLE_INTO_CHECK = &quot;Cannot castle into check&quot;
+
+# --- En passant ---
+ERR_EN_PASSANT_UNAVAILABLE = &quot;En passant is not available on that square right now&quot;
+
+# --- Game-flow / command messages ---
+MSG_SAVED = &quot;Game saved to {filename} :3&quot;
+ERR_SAVE_FAILED = &quot;Could not save game: {error}&quot;
+ERR_LOAD_FAILED = &quot;Could not load game: {error}&quot;
+MSG_LOADED = &quot;Game loaded from {filename}&quot;
+MSG_NOTHING_TO_UNDO = &quot;Nothing to undo yet.&quot;
+MSG_MOVE_UNDONE = &quot;Move undone.&quot;
+MSG_NO_HISTORY = &quot;No moves played yet.&quot;
+MSG_CHECK = &quot;{turn} is in check!&quot;
+MSG_CHECKMATE = &quot;Checkmate! {turn} wins! GG :3&quot;
+MSG_STALEMATE = &quot;Stalemate -- the game is a draw.&quot;
+MSG_EXIT = &quot;Exiting game... Byeeeeeeeeeeeee :3&quot;
+
+HELP_TEXT = (
+    &quot;Commands:\n&quot;
+    &quot;  &lt;move like e2e4&gt;   move a piece from one square to another\n&quot;
+    &quot;  O-O / O-O-O        castle kingside / queenside (0-0 also works)\n&quot;
+    &quot;  undo               undo the last move\n&quot;
+    &quot;  history            show the move history\n&quot;
+    &quot;  save [filename]    save the game\n&quot;
+    &quot;  load [filename]    load a game\n&quot;
+    &quot;  exit               quit\n&quot;
+    &quot;(En passant is applied automatically when the position allows it.)&quot;
+)</code></pre><p>
+A few things about how this file is organized are worth calling out
+directly:
+</p>
+<ul>
+  <li><strong>Grouped by when they fire, not alphabetically.</strong> Input
+  parsing errors, general move errors, per-piece movement errors, pawn
+  errors, castling errors, en passant errors, and game-flow messages are
+  each in their own block, so you can find "everything that can go wrong
+  while castling" as one visual group instead of hunting through an
+  alphabetical list.</li>
+  <li><strong>Naming convention.</strong> Every constant that represents a
+  rejection reason starts with <code class="inline">ERR_</code>; every
+  constant that's an informational status, not a failure, starts with
+  <code class="inline">MSG_</code>. Reading an import line in
+  <code class="inline">main.py</code> or <code class="inline">pieces.py</code>
+  tells you at a glance whether that code path can fail.</li>
+  <li><strong>Template strings for anything with a variable in it.</strong>
+  Messages that need to include the current player's name or a filename
+  (<code class="inline">ERR_NOT_YOUR_TURN</code>, <code class="inline">MSG_SAVED</code>, <code class="inline">MSG_CHECK</code>, and so on) are
+  written with Python's <code class="inline">str.format()</code>
+  placeholders — <code class="inline">"{turn}"</code>, <code class="inline">"{filename}"</code>, <code class="inline">"{error}"</code> — and
+  filled in at the call site with, for example,
+  <code class="inline">ERR_NOT_YOUR_TURN.format(turn=turn)</code>. The
+  template lives here; only the values that change at runtime are supplied
+  where the message is actually used.</li>
+  <li><strong>No <code class="inline">print()</code> calls anywhere in this
+  file.</strong> It is pure data — strings and nothing else. Every decision
+  about <em>when</em> and <em>how</em> a message reaches the player belongs
+  to the file that has that context (<code class="inline">main.py</code>, in
+  every case), which keeps this file trivially reusable if the game ever
+  grew a second interface.</li>
+</ul>
+<div class="callout">
+<span class="label">A bug this directly prevented</span>
+<p>
+Earlier versions of the movement-checking logic called
+<code class="inline">print()</code> directly from deep inside per-piece
+rules, including from code paths that also run silently, thousands of times
+a turn, while scanning the whole board for checkmate and stalemate detection
+(<a href="#checkmate-stalemate">Section 6.9</a>). If those internal checks
+had kept calling <code class="inline">print()</code> instead of returning a
+message string, every single legality scan would have spammed the terminal
+with rejection reasons that had nothing to do with the player's actual move.
+Moving every message into data, returned as a value instead of printed as a
+side effect, is what makes it safe to call the same legality-checking code
+both for "tell the player what's wrong" and for "silently ask the engine a
+hypothetical question."
+</p>
+</div>
+</section>
+<section id="pieces-py">
+<span class="section-number">06</span>
+<h2 class="section-title">pieces.py — The Rules Engine</h2>
+
+<p>
+This is the heart of the project. Every rule of chess that isn't purely
+about turn order or the game loop lives in this one file. It's organized
+bottom-up: small, single-purpose helpers first (reading a coordinate,
+checking a color, checking a straight-line path), then piece movement rules
+built on top of those helpers, then check detection built on top of
+movement rules, then castling and en passant as special cases layered on
+top of everything else, and finally the two functions that tie it all
+together — <code class="inline">is_legal_move</code>, which answers "can
+this one move happen," and <code class="inline">has_any_legal_move</code>,
+which answers "does this player have <em>any</em> legal move at all,"
+the question that checkmate and stalemate both reduce to.
+</p>
+
+<h3 id="coords-and-color">6.1 &nbsp;Coordinates and Color</h3>
+
+<h4 id="default-castling-rights">default_castling_rights()</h4>
+<pre class="code"><code>def default_castling_rights():
+    return {&quot;White&quot;: {&quot;K&quot;: True, &quot;Q&quot;: True}, &quot;Black&quot;: {&quot;K&quot;: True, &quot;Q&quot;: True}}</code></pre><p>
+A small factory function that returns a brand-new rights dictionary with
+both colors starting with both castling sides available. It exists mainly
+so that nobody has to retype this exact nested-dictionary literal in
+multiple places (<code class="inline">main.py</code>'s game setup and its
+load-game fallback both call this instead) — and so a fresh dictionary is
+created every time, rather than one shared, mutable dictionary that every
+new game would accidentally inherit the previous game's revoked rights
+from.
+</p>
+
+<h4 id="read-coordinate">read_coordinate(coord)</h4>
+<pre class="code"><code>def read_coordinate(coord):
+    &quot;&quot;&quot;Parses a 4-character move like &#x27;e2e4&#x27; into board (row, col) indices.
+
+    Raises KeyError for an invalid file letter, ValueError for an invalid
+    or out-of-range rank digit -- callers rely on catching those.
+    &quot;&quot;&quot;
+    coord = coord.upper()
+    start_col = file_col[coord[0]]
+    end_col = file_col[coord[2]]
+    start_rank = int(coord[1])
+    end_rank = int(coord[3])
+    if not (1 &lt;= start_rank &lt;= 8) or not (1 &lt;= end_rank &lt;= 8):
+        raise ValueError(&quot;Rank must be between 1 and 8&quot;)
+    start_row = 8 - start_rank
+    end_row = 8 - end_rank
+    return start_row, start_col, end_row, end_col</code></pre><p>
+This function is the single bridge between how a human types a move
+(<code class="inline">"e2e4"</code>, algebraic-style) and how the rest of the
+program thinks about the board (row/column integer pairs). It's short, but
+every line matters:
+</p>
+<ul>
+  <li><code class="inline">coord = coord.upper()</code> — normalizes case up
+  front, so <code class="inline">"e2e4"</code> and <code class="inline">"E2E4"</code> behave identically from this point on.</li>
+  <li><code class="inline">file_col[coord[0]]</code> — looks the starting
+  file letter up in the <code class="inline">file_col</code> dictionary
+  (<code class="inline">{"A": 0, "B": 1, ..., "H": 7}</code>, built once at
+  module load time from the <code class="inline">FILES</code> string). If
+  the character isn't one of <code class="inline">A</code> through
+  <code class="inline">H</code>, this line raises a
+  <code class="inline">KeyError</code> on its own — no explicit validation
+  needed, because a dictionary lookup with a missing key already fails
+  loudly. <code class="inline">main.py</code> catches exactly this
+  exception and turns it into <code class="inline">ERR_BAD_FILE</code>
+  (<a href="#error-handling">Section 7.6</a>).</li>
+  <li><code class="inline">start_rank = int(coord[1])</code> — converts the
+  rank character to an integer. If it isn't a digit at all,
+  <code class="inline">int()</code> raises <code class="inline">ValueError</code>, again for free.</li>
+  <li>The explicit range check, <code class="inline">if not (1 &lt;= start_rank &lt;= 8) or not (1 &lt;= end_rank &lt;= 8): raise ValueError(...)</code>,
+  exists because <code class="inline">int("9")</code> and
+  <code class="inline">int("0")</code> both succeed as conversions but are
+  not valid ranks. Without this check, a rank of <code class="inline">9</code> would silently compute
+  <code class="inline">start_row = 8 - 9 = -1</code> — and in Python,
+  indexing a list with <code class="inline">-1</code> doesn't crash, it
+  quietly wraps around and returns the <em>last</em> row instead. That
+  would let a typo like <code class="inline">e9e4</code> silently operate
+  on the wrong square instead of producing a clear error. This is exactly
+  the kind of "the code runs, but does the wrong thing" bug that's more
+  dangerous than a crash, because nothing warns you it happened.</li>
+  <li><code class="inline">start_row = 8 - start_rank</code> — the rank/row
+  inversion from <a href="#data-model">Section 3</a>, applied explicitly and
+  only here.</li>
+</ul>
+<p>
+The function returns a 4-tuple, always in the order
+<code class="inline">(start_row, start_col, end_row, end_col)</code> — and
+every other function in the codebase that takes a move as separate
+coordinates uses this exact same parameter order and naming, with no
+exceptions. That consistency is a direct fix for the original bug described
+in <a href="#bugs-fixed">Section 9</a>, where a mismatched argument order
+between two functions silently swapped rows and columns.
+</p>
+
+<h4 id="square-name">square_name(row, col)</h4>
+<pre class="code"><code>def square_name(row, col):
+    return col_file[col] + str(8 - row)</code></pre><p>
+The inverse direction: given board coordinates, produce the algebraic name a
+human expects to read (used when building move notation — see
+<a href="#notation">Section 6.10</a>). <code class="inline">col_file</code>
+is the mirror image of <code class="inline">file_col</code>, mapping
+<code class="inline">0 → "a", 1 → "b", …, 7 → "h"</code> (lowercase, matching
+how algebraic notation is conventionally written), and
+<code class="inline">str(8 - row)</code> reverses the row/rank inversion —
+the same formula as <code class="inline">read_coordinate</code>, run
+backwards.
+</p>
+
+<h4 id="color-check">color_check(board, row, col)</h4>
+<pre class="code"><code>def color_check(board, row, col):
+    piece = board[row][col]
+    if piece == &quot;0&quot;:
+        return None
+    elif piece.isupper():
+        return &quot;White&quot;
+    else:
+        return &quot;Black&quot;</code></pre><p>
+The simplest possible answer to "whose piece is this, if anyone's": look up
+the character at that square, return <code class="inline">None</code> if
+it's the empty-square marker <code class="inline">"0"</code>, otherwise
+return <code class="inline">"White"</code> if the character is uppercase
+(<code class="inline">str.isupper()</code>) and <code class="inline">"Black"</code> otherwise. This is possible in three lines specifically
+because of the case-encodes-color decision made in the data model.
+</p>
+<div class="callout">
+<span class="label">Parameter order matters here more than anywhere else</span>
+<p>
+This function's signature is <code class="inline">color_check(board, row, col)</code> — row first, then column, matching
+<code class="inline">board[row][col]</code> indexing exactly. Every call site
+in the current codebase passes arguments in that same order. This sounds
+too obvious to mention, but it is precisely the convention that was
+violated in the original version of this project: a call written as
+<code class="inline">color_check(board, start_row, start_col)</code> against
+a function defined as <code class="inline">color_check(board, col, row)</code> silently transposed every lookup, and is the exact root cause
+walked through in <a href="#bugs-fixed">Section 9</a>. There is nothing
+clever about the fix — it's simply making every function's parameter order
+agree with every call site's argument order, everywhere, with no
+exceptions. That consistency is worth restating because it's the single
+most important habit this whole rewrite depends on.
+</p>
+</div>
+<h3 id="geometry-helpers">6.2 &nbsp;Geometry Helpers</h3>
+
+<h4 id="sign">_sign(x)</h4>
+<pre class="code"><code>def _sign(x):
+    return (x &gt; 0) - (x &lt; 0)</code></pre><p>
+A tiny utility with a leading underscore in its name — the Python convention
+for "this is an internal implementation detail, not part of the module's
+public interface." It returns <code class="inline">1</code> if
+<code class="inline">x</code> is positive, <code class="inline">-1</code> if
+negative, and <code class="inline">0</code> if it's exactly zero, using the
+trick that in Python, <code class="inline">True</code> and
+<code class="inline">False</code> behave as <code class="inline">1</code>
+and <code class="inline">0</code> in arithmetic: <code class="inline">(x &gt; 0) - (x &lt; 0)</code> evaluates one comparison to get a 0 or 1, another
+to get a 0 or 1, and subtracts them. Its only job is to answer "which
+direction, along one axis, do I need to step to get from here to there" —
+which is exactly what tracing a straight line one square at a time needs.
+</p>
+
+<h4 id="path-check">path_check(board, start_row, start_col, end_row, end_col)</h4>
+<pre class="code"><code>def path_check(board, start_row, start_col, end_row, end_col):
+    &quot;&quot;&quot;True if every square strictly between start and end is empty.&quot;&quot;&quot;
+    row_step = _sign(end_row - start_row)
+    col_step = _sign(end_col - start_col)
+
+    row, col = start_row + row_step, start_col + col_step
+    while (row, col) != (end_row, end_col):
+        if board[row][col] != &quot;0&quot;:
+            return False
+        row += row_step
+        col += col_step
+
+    return True</code></pre><p>
+Rooks, bishops, and queens all share one rule that knights and kings don't:
+they can't jump over other pieces. This function is the one place that rule
+is implemented, and it's written generally enough to check a horizontal,
+vertical, <em>or</em> diagonal line with the same code.
+</p>
+<ul>
+  <li><code class="inline">row_step</code> and <code class="inline">col_step</code> are each either <code class="inline">-1</code>,
+  <code class="inline">0</code>, or <code class="inline">1</code>, computed
+  with <code class="inline">_sign</code>. For a horizontal move,
+  <code class="inline">row_step</code> is <code class="inline">0</code> and
+  <code class="inline">col_step</code> is <code class="inline">±1</code>; for
+  a vertical move it's the reverse; for a diagonal move both are
+  <code class="inline">±1</code>. Together, one step of
+  <code class="inline">(row_step, col_step)</code> always moves exactly one
+  square directly toward the destination, regardless of which of the three
+  directions is being checked.</li>
+  <li>The loop starts one step <em>past</em> the starting square
+  (<code class="inline">row, col = start_row + row_step, start_col + col_step</code>) — the starting square obviously has a piece on it (the
+  piece that's trying to move), so checking it would always incorrectly
+  report the path as blocked.</li>
+  <li>It walks forward, one step at a time, checking
+  <code class="inline">board[row][col] != "0"</code> at each square, until
+  it reaches <code class="inline">(end_row, end_col)</code>. Because the
+  loop condition is <code class="inline">while (row, col) != (end_row, end_col)</code>, the destination square itself is never checked here — whether
+  the destination is empty, or contains a capturable enemy piece, or
+  contains a friendly piece, is a separate question answered by
+  <code class="inline">can_piece_reach</code>, not by this function.</li>
+  <li>If every square in between is empty, the loop finishes normally and
+  returns <code class="inline">True</code>. The moment any square in
+  between is occupied, it returns <code class="inline">False</code>
+  immediately.</li>
+</ul>
+<p>
+This function has no opinion about which piece is moving, or whether the
+move's shape is even valid in the first place — it purely answers "if a
+piece traveled in a straight line from here to there, would anything be in
+the way." That narrow focus is what lets the exact same function serve
+rooks, bishops, and queens alike in <code class="inline">can_piece_reach</code>, just below.
+</p>
+
+<h3 id="movement-legality">6.3 &nbsp;Movement Legality Per Piece: can_piece_reach</h3>
+<p>
+This is the function that answers "could the piece sitting on this square
+physically move to that square, given the current board" — for every piece
+type, in one place. Note what it deliberately does <em>not</em> check: it
+never asks whose turn it is. That question is answered one layer up, in
+<code class="inline">is_legal_move</code> (<a href="#is-legal-move">Section
+6.8</a>). Keeping the two separate is what makes this function reusable for
+a second purpose — figuring out which squares a piece <em>attacks</em>,
+which is how check detection works (<a href="#check-detection">Section
+6.5</a>). A piece attacks every square it could move to, regardless of
+whose turn it actually is, so a turn-agnostic version of "can this piece
+reach that square" is precisely the tool check detection needs.
+</p>
+<pre class="code"><code>def can_piece_reach(board, start_row, start_col, end_row, end_col):
+    &quot;&quot;&quot;Pure movement-pattern legality for the piece at the start square.
+
+    Does NOT consider whose turn it is -- only whether the piece could
+    physically make that move on this board (shape, blocking pieces, and
+    not landing on a friendly piece). This makes it safe to reuse both for
+    validating the player&#x27;s move and for figuring out which squares a
+    piece attacks (used for check detection).
+    &quot;&quot;&quot;
+    piece = board[start_row][start_col]
+    piece_type = piece.lower()
+    piece_color = color_check(board, start_row, start_col)
+    target_color = color_check(board, end_row, end_col)
+
+    col_diff = abs(end_col - start_col)
+    row_diff = abs(end_row - start_row)
+
+    if (start_row, start_col) == (end_row, end_col):
+        return False, ERR_NO_MOVEMENT
+
+    if target_color == piece_color:
+        return False, ERR_FRIENDLY_FIRE
+
+    if piece_type == &#x27;n&#x27;:
+        if col_diff * row_diff == 2:
+            return True, &quot;&quot;
+        return False, ERR_KNIGHT_SHAPE
+
+    elif piece_type == &#x27;k&#x27;:
+        if max(col_diff, row_diff) == 1:
+            return True, &quot;&quot;
+        return False, ERR_KING_RANGE
+
+    elif piece_type == &#x27;r&#x27;:
+        if col_diff != 0 and row_diff != 0:
+            return False, ERR_ROOK_LINE
+        if not path_check(board, start_row, start_col, end_row, end_col):
+            return False, ERR_BLOCKED_PATH
+        return True, &quot;&quot;
+
+    elif piece_type == &#x27;b&#x27;:
+        if col_diff != row_diff:
+            return False, ERR_BISHOP_DIAGONAL
+        if not path_check(board, start_row, start_col, end_row, end_col):
+            return False, ERR_BLOCKED_PATH
+        return True, &quot;&quot;
+
+    elif piece_type == &#x27;q&#x27;:
+        is_straight = (col_diff == 0 or row_diff == 0)
+        is_diagonal = (col_diff == row_diff)
+        if not (is_straight or is_diagonal):
+            return False, ERR_QUEEN_LINE
+        if not path_check(board, start_row, start_col, end_row, end_col):
+            return False, ERR_BLOCKED_PATH
+        return True, &quot;&quot;
+
+    elif piece_type == &#x27;p&#x27;:
+        return pawn_check(board, start_row, start_col, end_row, end_col, piece_color)
+
+    else:
+        return False, ERR_UNKNOWN_PIECE</code></pre><p>
+Walking through it top to bottom:
+</p>
+<ul>
+  <li><code class="inline">piece_type = piece.lower()</code> normalizes away
+  color, so the movement-shape logic below only ever has to think about six
+  letters (<code class="inline">n k r b q p</code>), not twelve.</li>
+  <li><code class="inline">col_diff</code> and <code class="inline">row_diff</code> are the absolute distances traveled along each axis —
+  the two numbers almost every piece's movement rule is expressed in terms
+  of.</li>
+  <li><strong>"You have to actually move somewhere."</strong> If the start
+  and end squares are identical, the move is rejected immediately
+  (<code class="inline">ERR_NO_MOVEMENT</code>) — before any piece-specific
+  logic even runs, because no piece is allowed to "move" to the square it's
+  already standing on.</li>
+  <li><strong>"You cannot capture your own piece."</strong>
+  <code class="inline">target_color == piece_color</code> catches this in
+  one comparison. This check compares the piece's <em>actual</em> color
+  against the target square's color — not against whichever color's turn it
+  is — which is exactly what makes this check correct when it's reused by
+  <code class="inline">is_square_attacked</code> to ask hypothetical
+  questions about pieces that may not even belong to the player currently
+  moving.</li>
+  <li><strong>Knight</strong> — <code class="inline">col_diff * row_diff == 2</code> is a compact way of expressing the L-shape. The only two
+  (distance, distance) pairs whose product is <code class="inline">2</code>
+  are <code class="inline">(1, 2)</code> and <code class="inline">(2, 1)</code> — exactly the two orientations of a knight's move — and
+  any other combination (a straight line, a diagonal, anything larger)
+  produces a different product.</li>
+  <li><strong>King</strong> — <code class="inline">max(col_diff, row_diff) == 1</code> allows every square immediately adjacent (horizontally,
+  vertically, or diagonally) and nothing farther. This is deliberately the
+  <em>only</em> king movement this function ever approves; the special
+  two-square castling move is intercepted one layer up, before it ever
+  reaches this function (<a href="#is-legal-move">Section 6.8</a>), which is
+  why the king's ordinary rule here can stay this simple.</li>
+  <li><strong>Rook</strong> — <code class="inline">col_diff != 0 and row_diff != 0</code> rejects anything that isn't purely horizontal or
+  purely vertical, then <code class="inline">path_check</code> confirms
+  nothing is in the way.</li>
+  <li><strong>Bishop</strong> — <code class="inline">col_diff != row_diff</code> rejects anything that isn't a perfect diagonal (on a
+  diagonal, the number of squares moved horizontally always equals the
+  number moved vertically), then <code class="inline">path_check</code>
+  again confirms a clear path.</li>
+  <li><strong>Queen</strong> — simply the rook's rule <em>or</em> the
+  bishop's rule: <code class="inline">is_straight</code> (like a rook) or
+  <code class="inline">is_diagonal</code> (like a bishop). This one line is
+  the entire justification for the traditional description of a queen as
+  "a rook and a bishop combined."</li>
+  <li><strong>Pawn</strong> — pawns are the one piece whose legality depends
+  on which direction it's facing, so the logic is split out into its own
+  function, <code class="inline">pawn_check</code>, covered next.</li>
+  <li>Anything that isn't one of the six known piece letters falls through
+  to <code class="inline">ERR_UNKNOWN_PIECE</code> — a defensive fallback
+  that should be unreachable in normal play, but which turns a corrupted
+  board (for instance, from a hand-edited save file) into a clear error
+  instead of a silent crash somewhere else.</li>
+</ul>
+<h3 id="pawn-logic">6.4 &nbsp;Pawn Logic: pawn_check</h3>
+<p>
+Pawns break almost every symmetry the other five pieces share. They move
+differently depending on color, they move differently depending on whether
+they're capturing, and they have a special first-move privilege. That's
+enough special-casing to justify pulling pawns into their own function
+rather than folding them into <code class="inline">can_piece_reach</code>.
+</p>
+<pre class="code"><code>def pawn_check(board, start_row, start_col, end_row, end_col, piece_color):
+    col_diff = abs(end_col - start_col)
+    row_diff = end_row - start_row
+
+    forward = -1 if piece_color == &quot;White&quot; else 1
+    starting_row = 6 if piece_color == &quot;White&quot; else 1
+
+    is_target_empty = board[end_row][end_col] == &quot;0&quot;
+
+    if col_diff == 0:
+        if row_diff == forward:
+            if not is_target_empty:
+                return False, ERR_PAWN_BLOCKED_FORWARD
+            return True, &quot;&quot;
+        elif row_diff == 2 * forward and start_row == starting_row:
+            middle_row = start_row + forward
+            if board[middle_row][start_col] != &quot;0&quot; or not is_target_empty:
+                return False, ERR_PAWN_BLOCKED_DOUBLE
+            return True, &quot;&quot;
+        else:
+            return False, ERR_PAWN_BAD_DISTANCE
+
+    elif col_diff == 1 and row_diff == forward:
+        if is_target_empty:
+            return False, ERR_PAWN_BAD_CAPTURE
+        return True, &quot;&quot;
+
+    return False, ERR_PAWN_INVALID</code></pre><ul>
+  <li><code class="inline">forward</code> is <code class="inline">-1</code>
+  for White and <code class="inline">1</code> for Black. This single line
+  is the entire reason pawns need to know their color at all: White's pawns
+  start on row 6 and move toward row 0 (decreasing row numbers, hence
+  <code class="inline">-1</code>), while Black's pawns start on row 1 and
+  move toward row 7 (increasing row numbers, hence <code class="inline">1</code>). Every other piece is symmetric enough that this kind of
+  direction constant is never needed.</li>
+  <li><code class="inline">starting_row</code> is row 6 for White, row 1 for
+  Black — each color's home rank for pawns, and the only rank a pawn is ever
+  allowed to advance two squares from.</li>
+  <li><strong>Straight ahead, one square</strong> (<code class="inline">col_diff == 0 and row_diff == forward</code>): only legal if the
+  destination is empty. A pawn is the only piece in chess that cannot
+  capture in the same direction it normally moves — <code class="inline">ERR_PAWN_BLOCKED_FORWARD</code> exists specifically for "there's an
+  enemy piece directly ahead of you, and no, you may not capture it by
+  walking into it."</li>
+  <li><strong>Straight ahead, two squares</strong> (<code class="inline">row_diff == 2 * forward and start_row == starting_row</code>):
+  only available from the starting rank, and only if <em>both</em> the
+  square immediately in front (<code class="inline">middle_row</code>) and
+  the destination square are empty — a pawn cannot hop over an occupied
+  square on its first move any more than it can on any other move.</li>
+  <li><strong>Diagonal capture</strong> (<code class="inline">col_diff == 1 and row_diff == forward</code>): only legal if the destination is
+  <em>not</em> empty — the exact mirror image of the straight-ahead rule.
+  A pawn may only step diagonally when there is something there to capture.
+  (The one exception — capturing diagonally onto an <em>empty</em> square,
+  en passant — is deliberately not handled here at all; it's layered on top
+  in <code class="inline">is_legal_move</code>, covered in
+  <a href="#is-legal-move">Section 6.8</a>. Keeping it out of this function
+  means <code class="inline">pawn_check</code> can stay a pure description
+  of ordinary pawn movement.)</li>
+  <li>Anything else — moving two squares diagonally, moving backward, moving
+  three squares — falls through to <code class="inline">ERR_PAWN_INVALID</code>.</li>
+</ul>
+
+<h3 id="check-detection">6.5 &nbsp;Check Detection</h3>
+<p>
+Three small functions build on each other to answer "is this king currently
+under attack."
+</p>
+
+<h4 id="find-king">find_king(board, color)</h4>
+<pre class="code"><code>def find_king(board, color):
+    target = &#x27;K&#x27; if color == &quot;White&quot; else &#x27;k&#x27;
+    for row in range(8):
+        for col in range(8):
+            if board[row][col] == target:
+                return row, col
+    return None</code></pre><p>
+A direct scan of all 64 squares looking for <code class="inline">'K'</code>
+(White) or <code class="inline">'k'</code> (Black). There's no shortcut here
+because the board doesn't separately track "where is each king" anywhere
+else — the board <em>is</em> the only source of truth, so finding a piece on
+it means looking at every square until it turns up. Returning
+<code class="inline">None</code> if no king is found (which should never
+happen in a real game, since a king is never actually captured — the game
+ends at checkmate, one move before that would happen) makes this function
+defensive rather than assuming a king always exists.
+</p>
+
+<h4 id="is-square-attacked">is_square_attacked(board, row, col, by_color)</h4>
+<pre class="code"><code>def is_square_attacked(board, row, col, by_color):
+    for r in range(8):
+        for c in range(8):
+            if color_check(board, r, c) != by_color:
+                continue
+            ok, _ = can_piece_reach(board, r, c, row, col)
+            if ok:
+                return True
+    return False</code></pre><p>
+This is the function that makes check detection possible, and its strategy
+is deliberately brute-force: loop over <em>every</em> square on the board,
+and for every piece belonging to <code class="inline">by_color</code>, ask
+<code class="inline">can_piece_reach</code> whether that piece could legally
+move to <code class="inline">(row, col)</code> right now. If even one piece
+can, the target square is under attack.
+</p>
+<p>
+This is exactly where the turn-agnostic design of
+<code class="inline">can_piece_reach</code> (<a href="#movement-legality">Section 6.3</a>) pays off: this function needs to ask "could this Black
+piece reach the White king's square," which has nothing to do with whose
+turn it currently is — it's a purely hypothetical, defensive question, asked
+constantly, often for squares nobody is about to actually move to (see
+<a href="#castling">Section 6.7</a>, where this same function checks three
+different squares just to validate one castling attempt). Because
+<code class="inline">can_piece_reach</code> never touches
+<code class="inline">turn</code> and never prints anything, it's exactly the
+right tool to call 64 times in a row without any unwanted side effects.
+</p>
+<p>
+64 squares checked, each one a call into a function that itself may check a
+straight-line path across up to 7 more squares — this is not the fastest
+possible algorithm (a real engine precomputes attack tables), but for a
+turn-based, human-paced terminal game, it runs in a fraction of a second and
+is far easier to convince yourself is correct, which matters more here than
+raw speed.
+</p>
+
+<h4 id="is-in-check">is_in_check(board, color)</h4>
+<pre class="code"><code>def is_in_check(board, color):
+    king_pos = find_king(board, color)
+    if king_pos is None:
+        return False
+    opponent = &quot;Black&quot; if color == &quot;White&quot; else &quot;White&quot;
+    return is_square_attacked(board, king_pos[0], king_pos[1], opponent)</code></pre><p>
+The composition of the previous two functions: find this color's king, then
+ask whether the <em>opponent's</em> pieces attack that square. If the king
+can't be found at all, this returns <code class="inline">False</code> rather
+than raising an error — a defensive default for a situation that should
+never arise in a well-formed game.
+</p>
+<h3 id="simulating-moves">6.6 &nbsp;Simulating Moves Safely</h3>
+<p>
+Chess has a rule that can't be checked by looking at a single piece in
+isolation: <strong>a move is illegal if it would leave your own king in
+check</strong>, even if the piece being moved follows its normal movement
+rules perfectly. A pinned rook, for instance, might have a perfectly clear,
+perfectly straight path to a square — and still be forbidden from taking it,
+because moving away would expose the king behind it. Answering this
+requires actually trying the move and looking at the resulting position,
+which is exactly what these two functions are for.
+</p>
+
+<h4 id="simulate-move">simulate_move(board, start_row, start_col, end_row, end_col)</h4>
+<pre class="code"><code>def simulate_move(board, start_row, start_col, end_row, end_col):
+    new_board = clone_board(board)
+    new_board[end_row][end_col] = new_board[start_row][start_col]
+    new_board[start_row][start_col] = &quot;0&quot;
+    return new_board</code></pre><p>
+Clone the board (<a href="#clone-board">Section 4.4</a>), move the piece on
+the clone exactly the way <code class="inline">main.py</code> will move it
+on the real board later, and return the clone. The real board is never
+touched. This "clone, try, inspect, discard" pattern is the single most
+repeated idea in the whole rules engine — it's how
+<code class="inline">is_legal_move</code> checks for self-check
+(<a href="#is-legal-move">Section 6.8</a>), and by extension how
+<code class="inline">has_any_legal_move</code> can safely try thousands of
+hypothetical moves per turn (<a href="#checkmate-stalemate">Section 6.9</a>)
+without ever risking corrupting the actual game in progress.
+</p>
+
+<h4 id="simulate-en-passant">simulate_en_passant(board, start_row, start_col, end_row, end_col, captured_row)</h4>
+<pre class="code"><code>def simulate_en_passant(board, start_row, start_col, end_row, end_col, captured_row):
+    new_board = clone_board(board)
+    new_board[end_row][end_col] = new_board[start_row][start_col]
+    new_board[start_row][start_col] = &quot;0&quot;
+    new_board[captured_row][end_col] = &quot;0&quot;
+    return new_board</code></pre><p>
+Almost identical to <code class="inline">simulate_move</code>, with one
+extra line: after moving the capturing pawn, it also empties
+<code class="inline">new_board[captured_row][end_col]</code> — the square
+where the captured pawn actually sits, which (as explained in
+<a href="#is-legal-move">Section 6.8</a>) is <em>not</em> the same square the
+capturing pawn lands on. A separate function exists for this rather than
+adding an <code class="inline">if</code> branch to
+<code class="inline">simulate_move</code> because the two situations
+genuinely construct different boards, and keeping them as two small,
+named functions makes each call site read as a clear statement of intent:
+"simulate an ordinary move" versus "simulate an en passant capture."
+</p>
+
+<h3 id="castling">6.7 &nbsp;Castling</h3>
+<p>
+Castling is the single most rule-heavy move in chess. It moves two pieces
+at once (the king and a rook), it depends on history rather than just the
+current position, and it has three separate "no" conditions related to
+check that don't apply to any other move. Three functions handle it: one
+that decides whether it's currently allowed, one that actually performs it,
+and one that keeps the "is it still allowed" state correct after every
+move.
+</p>
+
+<h4 id="is-legal-castle">is_legal_castle(board, turn, start_col, end_col, castling_rights)</h4>
+<pre class="code"><code>def is_legal_castle(board, turn, start_col, end_col, castling_rights):
+    row = 7 if turn == &quot;White&quot; else 0
+    king_side = end_col &gt; start_col
+    side_key = &quot;K&quot; if king_side else &quot;Q&quot;
+
+    rights = (castling_rights or {}).get(turn, {})
+    if not rights.get(side_key, False):
+        return False, ERR_CASTLE_RIGHTS_LOST
+
+    rook_col = 7 if king_side else 0
+    expected_rook = &#x27;R&#x27; if turn == &quot;White&quot; else &#x27;r&#x27;
+    if board[row][rook_col] != expected_rook:
+        return False, ERR_CASTLE_ROOK_MOVED
+
+    step = 1 if king_side else -1
+    col = 4 + step
+    while col != rook_col:
+        if board[row][col] != &quot;0&quot;:
+            return False, ERR_CASTLE_PATH_BLOCKED
+        col += step
+
+    opponent = &quot;Black&quot; if turn == &quot;White&quot; else &quot;White&quot;
+    if is_square_attacked(board, row, 4, opponent):
+        return False, ERR_CASTLE_IN_CHECK
+
+    pass_col = 4 + step
+    land_col = 4 + 2 * step
+    if is_square_attacked(board, row, pass_col, opponent):
+        return False, ERR_CASTLE_THROUGH_CHECK
+    if is_square_attacked(board, row, land_col, opponent):
+        return False, ERR_CASTLE_INTO_CHECK
+
+    return True, &quot;&quot;</code></pre><p>
+This function is called once <code class="inline">is_legal_move</code> has
+already recognized the shape of the move — the king moving exactly two
+squares along its own rank — and it works through the real rules of
+castling in order, rejecting at the first one that fails:
+</p>
+<ul>
+  <li><strong>Which side.</strong> <code class="inline">king_side = end_col &gt; start_col</code> — moving toward higher column numbers means
+  moving toward the H-file, i.e. kingside. <code class="inline">side_key</code> becomes <code class="inline">"K"</code> or
+  <code class="inline">"Q"</code> to match the keys used in
+  <code class="inline">castling_rights</code>.</li>
+  <li><strong>Rights.</strong> <code class="inline">rights.get(side_key, False)</code> — if this specific side's right has already been
+  revoked (because the king or that rook has moved before, or that rook was
+  captured — see <code class="inline">update_castling_rights</code> below),
+  the attempt is rejected immediately with
+  <code class="inline">ERR_CASTLE_RIGHTS_LOST</code>, without even checking
+  the board. Note that because rights tracking already guarantees the king
+  hasn't moved whenever this function runs, the king's current square can
+  safely be assumed to be column 4 — which is why nothing in this function
+  re-derives the king's position from the board.</li>
+  <li><strong>The rook is actually there.</strong> Even with the right
+  still marked <code class="inline">True</code>, this defensively confirms
+  the expected rook (<code class="inline">'R'</code> or
+  <code class="inline">'r'</code>) is physically on its home corner —
+  protection against a corrupted or hand-edited save file, not something
+  that should ever fail in ordinary play.</li>
+  <li><strong>Nothing between the king and the rook.</strong> A small loop
+  walks from just beside the king (<code class="inline">4 + step</code>)
+  toward the rook's column, and rejects the move the moment it finds an
+  occupied square. On the queenside, this correctly checks all three
+  squares between them (<code class="inline">d1</code>, <code class="inline">c1</code>, <code class="inline">b1</code>, for White) even
+  though the king only travels across two of them — the rook needs a clear
+  path too.</li>
+  <li><strong>Not currently in check.</strong> <code class="inline">is_square_attacked(board, row, 4, opponent)</code> checks the king's
+  current square. You cannot castle your way out of check.</li>
+  <li><strong>Not passing through an attacked square.</strong> <code class="inline">pass_col</code> is the square immediately beside the king in the
+  direction of travel — the square it passes over on its way to its
+  destination. If the opponent attacks that square, the castle is illegal,
+  even though the king is never actually captured there. This is the rule
+  that most obviously can't be expressed as "would the resulting position
+  leave the king in check," because the king never rests on that square at
+  all — it's a rule about the <em>path</em>, not just the destination,
+  which is exactly why castling needs its own dedicated legality function
+  instead of reusing the ordinary self-check simulation.</li>
+  <li><strong>Not landing on an attacked square.</strong> <code class="inline">land_col</code> is the king's final square — ordinary "don't move into
+  check," applied to the castling destination specifically.</li>
+</ul>
+<p>
+If every one of those checks passes, the function returns
+<code class="inline">True</code> — but notice that it never touches the
+board. All the mutation (moving the king, then moving the rook) happens
+afterward, in <code class="inline">main.py</code>, exactly the same
+"decide, then act" separation used everywhere else in the engine.
+</p>
+
+<h4 id="apply-castle">apply_castle(board, turn, end_col)</h4>
+<pre class="code"><code>def apply_castle(board, turn, end_col):
+    &quot;&quot;&quot;Relocates the rook after the king itself has already been moved.&quot;&quot;&quot;
+    row = 7 if turn == &quot;White&quot; else 0
+    king_side = end_col &gt; 4
+    rook_from = 7 if king_side else 0
+    rook_to = 5 if king_side else 3
+    rook_piece = board[row][rook_from]
+    board[row][rook_from] = &quot;0&quot;
+    board[row][rook_to] = rook_piece</code></pre><p>
+Castling moves <em>two</em> pieces, but <code class="inline">main.py</code>'s
+general-purpose move code (<code class="inline">board[start][start] = "0"; board[end][end] = piece</code>) already handles moving the king itself,
+exactly like any other piece. This function's only job is the second half:
+relocate the rook. Kingside, the rook moves from column 7 to column 5 (just
+beside where the king lands); queenside, from column 0 to column 3. Because
+<code class="inline">end_col</code> is the king's <em>destination</em>
+column, comparing it to <code class="inline">4</code> (the king's home
+column) is enough to re-derive which side is castling, without needing to
+pass that information down separately from
+<code class="inline">is_legal_castle</code>.
+</p>
+
+<h4 id="update-castling-rights">update_castling_rights(castling_rights, piece, start_row, start_col, end_row, end_col, turn)</h4>
+<pre class="code"><code>def update_castling_rights(castling_rights, piece, start_row, start_col, end_row, end_col, turn):
+    if piece.lower() == &#x27;k&#x27;:
+        castling_rights[turn][&quot;K&quot;] = False
+        castling_rights[turn][&quot;Q&quot;] = False
+
+    if piece.lower() == &#x27;r&#x27;:
+        home_row = 7 if turn == &quot;White&quot; else 0
+        if start_row == home_row and start_col == 0:
+            castling_rights[turn][&quot;Q&quot;] = False
+        elif start_row == home_row and start_col == 7:
+            castling_rights[turn][&quot;K&quot;] = False
+
+    opponent = &quot;Black&quot; if turn == &quot;White&quot; else &quot;White&quot;
+    opp_home_row = 7 if opponent == &quot;White&quot; else 0
+    if end_row == opp_home_row and end_col == 0:
+        castling_rights[opponent][&quot;Q&quot;] = False
+    elif end_row == opp_home_row and end_col == 7:
+        castling_rights[opponent][&quot;K&quot;] = False</code></pre><p>
+Called after <em>every single move</em> in the game, not just castling
+attempts, because any of three different events can silently retire a
+castling right:
+</p>
+<ul>
+  <li><strong>The king moves at all</strong> (including castling itself,
+  which is a king move) — both of that color's rights are revoked at once,
+  since a king that has moved even once can never castle again for the rest
+  of the game, no matter where it ends up afterward.</li>
+  <li><strong>A rook moves away from its original corner</strong> — only
+  that specific side's right is revoked. A rook that moves and later
+  returns to its home square does not restore the right; the check here is
+  about the rook's <code class="inline">start_row</code>/<code class="inline">start_col</code> for <em>this</em> move, so it only fires
+  once, at the moment the rook first leaves.</li>
+  <li><strong>An enemy piece captures on a rook's original corner</strong> —
+  this is the one condition that isn't about the mover's own pieces at all.
+  If Black's queen captures on a1, White's queenside rook is gone, and
+  White's queenside castling right must be revoked even though it was Black
+  who moved. The function checks the opponent's home-row corners against
+  the move's <em>destination</em> square for exactly this reason. As noted
+  in the code, this check doesn't need to confirm a rook actually died there
+  — if the rook had already moved away earlier, the right was already
+  <code class="inline">False</code> and re-setting it to
+  <code class="inline">False</code> is harmless; if it's still sitting
+  there, being captured is the only way an enemy piece could legally end up
+  on that exact square.</li>
+</ul>
+<p>
+Because rights only ever move from <code class="inline">True</code> to
+<code class="inline">False</code>, never back, and because this function
+runs unconditionally after every move rather than only after moves that
+look castling-related, there's no way for a right to become incorrectly
+stale — every relevant event is checked every single time.
+</p>
+<h3 id="is-legal-move">6.8 &nbsp;The Orchestrator: is_legal_move</h3>
+<p>
+Every other function in this file answers a narrow question. This one asks
+all of them, in the right order, and is the single function
+<code class="inline">main.py</code> actually calls to find out whether a
+proposed move should be allowed.
+</p>
+<pre class="code"><code>def is_legal_move(board, start_row, start_col, end_row, end_col, turn,
+                   castling_rights=None, en_passant_target=None):
+    piece = board[start_row][start_col]
+    if piece == &quot;0&quot;:
+        return False, ERR_NO_PIECE
+
+    piece_color = color_check(board, start_row, start_col)
+    if piece_color != turn:
+        return False, ERR_NOT_YOUR_TURN.format(turn=turn)
+
+    is_castle_attempt = (piece.lower() == &#x27;k&#x27; and start_row == end_row
+                          and abs(end_col - start_col) == 2)
+
+    forward = -1 if turn == &quot;White&quot; else 1
+    is_ep_attempt = (piece.lower() == &#x27;p&#x27; and en_passant_target is not None
+                      and (end_row, end_col) == en_passant_target
+                      and abs(end_col - start_col) == 1
+                      and (end_row - start_row) == forward)
+
+    if is_castle_attempt:
+        return is_legal_castle(board, turn, start_col, end_col, castling_rights)
+
+    if is_ep_attempt:
+        captured_row = start_row
+        if board[captured_row][end_col].lower() != &#x27;p&#x27; or color_check(board, captured_row, end_col) == turn:
+            return False, ERR_EN_PASSANT_UNAVAILABLE
+        hypothetical = simulate_en_passant(board, start_row, start_col, end_row, end_col, captured_row)
+    else:
+        ok, reason = can_piece_reach(board, start_row, start_col, end_row, end_col)
+        if not ok:
+            return False, reason
+        hypothetical = simulate_move(board, start_row, start_col, end_row, end_col)
+
+    if is_in_check(hypothetical, turn):
+        return False, ERR_SELF_CHECK
+
+    return True, &quot;&quot;</code></pre><p>
+Reading it as a decision tree:
+</p>
+<ol>
+  <li><strong>Is there a piece there at all?</strong> An empty starting
+  square is rejected before anything else even looks at it.</li>
+  <li><strong>Is it this player's piece?</strong> <code class="inline">piece_color != turn</code> catches both "that's your opponent's piece" and,
+  implicitly, "you tried to move nothing" (already handled above). This is
+  the exact check that the original version of this project got wrong by
+  calling <code class="inline">color_check</code> with swapped arguments —
+  see <a href="#bugs-fixed">Section 9</a> for the full story of that bug.</li>
+  <li><strong>Is this a castling attempt?</strong> Recognized purely from
+  shape — a king, moving two squares, along its own rank — with no need to
+  check <code class="inline">castling_rights</code> yet; that's
+  <code class="inline">is_legal_castle</code>'s job, and if this is a
+  castling attempt, control passes there immediately and nothing below this
+  point runs.</li>
+  <li><strong>Is this an en passant attempt?</strong> This is the most
+  detailed condition in the function, and it's worth unpacking fully:
+    <ul>
+      <li><code class="inline">piece.lower() == 'p'</code> — only pawns can
+      do this.</li>
+      <li><code class="inline">en_passant_target is not None</code> — there
+      has to actually be a live opportunity this turn.</li>
+      <li><code class="inline">(end_row, end_col) == en_passant_target</code> — the destination has to be <em>exactly</em> the recorded
+      target square, not just any nearby empty square.</li>
+      <li><code class="inline">abs(end_col - start_col) == 1</code> — it has
+      to be a genuinely diagonal move, one file over.</li>
+      <li><code class="inline">(end_row - start_row) == forward</code> —
+      and it has to travel in this pawn's own forward direction. Without
+      this last check, the geometry of the target square alone wouldn't
+      rule out an absurd case like a pawn trying to "capture" backward onto
+      the same square; direction is what keeps this rule tied to the pawn
+      that's actually allowed to use it.</li>
+    </ul>
+  If all four hold, this branch runs a further sanity check that there
+  really is an enemy pawn on <code class="inline">(captured_row, end_col)</code> — where <code class="inline">captured_row</code> is set to
+  <code class="inline">start_row</code>. This is worth pausing on, because
+  it's the one genuinely non-obvious piece of geometry in the whole file:
+  the captured pawn is <strong>not</strong> on the square the capturing pawn
+  moves to (that square, by definition, is empty — that's the whole point
+  of en passant). It's on the square directly beside the capturing pawn's
+  <em>starting</em> square, in the same row the capturing pawn started on,
+  but the same column the capturing pawn ends on. If White's pawn on e5
+  captures en passant onto d6, the captured Black pawn is sitting on d5 —
+  same row as White's pawn before it moved, same column as White's pawn
+  after it moved. That's precisely <code class="inline">(start_row, end_col)</code>.
+  </li>
+  <li><strong>Otherwise, it's an ordinary move</strong> — handed to
+  <code class="inline">can_piece_reach</code>, exactly as described in
+  <a href="#movement-legality">Section 6.3</a>.</li>
+  <li><strong>Finally, self-check.</strong> Whichever branch ran above, the
+  function now has a <code class="inline">hypothetical</code> board — either
+  from <code class="inline">simulate_en_passant</code> or
+  <code class="inline">simulate_move</code> — and asks
+  <code class="inline">is_in_check(hypothetical, turn)</code> one last time.
+  If the move, once actually made, would leave the mover's own king under
+  attack, it's rejected with <code class="inline">ERR_SELF_CHECK</code>,
+  regardless of how cleanly it passed every earlier check. This is the rule
+  that makes a pinned piece immovable (<a href="#simulating-moves">Section
+  6.6</a>) and it applies uniformly to every kind of move this function
+  handles — ordinary moves and en passant captures alike. (Castling has this
+  same protection built directly into
+  <code class="inline">is_legal_castle</code> instead, in the form of the
+  "not in check / not through check / not into check" trio, which is why
+  castling returns early and skips this final block entirely.)</li>
+</ol>
+<p>
+Only if every applicable check passes does this function return
+<code class="inline">True, ""</code>. At every rejection point, it returns
+<code class="inline">False</code> paired with a specific,
+already-written message from <a href="#errors-py">Section 5</a> — never a
+bare <code class="inline">False</code> on its own — which is what lets
+<code class="inline">main.py</code> always safely unpack the result as
+<code class="inline">legal, reason = is_legal_move(...)</code> without
+worrying that some code path forgot to include a reason.
+</p>
+<h3 id="checkmate-stalemate">6.9 &nbsp;Exhaustive Search: Checkmate and Stalemate</h3>
+<p>
+Chess defines checkmate and stalemate the same way a human would explain
+them at a board — not as special patterns to detect, but as the absence of
+options: "checkmate" is "in check, and no legal move gets you out of it";
+"stalemate" is "not in check, but no legal move exists at all." Both
+definitions reduce to one underlying question, which this codebase answers
+by brute force rather than by trying to be clever about it.
+</p>
+
+<h4 id="has-any-legal-move">has_any_legal_move(board, color, castling_rights, en_passant_target)</h4>
+<pre class="code"><code>def has_any_legal_move(board, color, castling_rights=None, en_passant_target=None):
+    for start_row in range(8):
+        for start_col in range(8):
+            if color_check(board, start_row, start_col) != color:
+                continue
+            for end_row in range(8):
+                for end_col in range(8):
+                    ok, _ = is_legal_move(board, start_row, start_col, end_row, end_col, color,
+                                           castling_rights, en_passant_target)
+                    if ok:
+                        return True
+    return False</code></pre><p>
+Four nested loops: every possible starting square (64 of them), and for each
+one that holds a piece of the right color, every possible destination square
+(another 64). For every one of those up to 4,096 combinations, it asks
+<code class="inline">is_legal_move</code> the exact same question
+<code class="inline">main.py</code> asks when a human types a move — and the
+moment <em>any</em> combination comes back legal, it returns
+<code class="inline">True</code> immediately without checking the rest.
+</p>
+<p>
+This is deliberately the least clever function in the file, and that's a
+feature, not an oversight. It doesn't need a separate code path for "what
+counts as a legal knight move" versus "what counts as a legal castle" —
+because <code class="inline">is_legal_move</code> already knows how to
+recognize and validate both, this loop gets castling and en passant
+correctness <em>for free</em>, just by trying every geometrically possible
+<code class="inline">(start, end)</code> pair and letting
+<code class="inline">is_legal_move</code> sort out which ones are real.
+Reusing the exact same legality function a human's move goes through
+guarantees this search can never disagree with what a real move attempt
+would decide.
+</p>
+
+<h4 id="is-checkmate">is_checkmate(board, color, castling_rights, en_passant_target)</h4>
+<pre class="code"><code>def is_checkmate(board, color, castling_rights=None, en_passant_target=None):
+    return (is_in_check(board, color)
+            and not has_any_legal_move(board, color, castling_rights, en_passant_target))</code></pre><h4 id="is-stalemate">is_stalemate(board, color, castling_rights, en_passant_target)</h4>
+<pre class="code"><code>def is_stalemate(board, color, castling_rights=None, en_passant_target=None):
+    return (not is_in_check(board, color)
+            and not has_any_legal_move(board, color, castling_rights, en_passant_target))</code></pre><p>
+Both are single-expression compositions of the same two ingredients, in
+opposite combinations: checkmate is <em>in check</em> AND
+<em>no legal move</em>; stalemate is <em>not</em> in check AND
+<em>no legal move</em>. Neither function duplicates any board-scanning logic
+of its own — both simply combine
+<code class="inline">is_in_check</code> and
+<code class="inline">has_any_legal_move</code>, which is exactly why those
+two building blocks were worth writing carefully and independently in the
+first place.
+</p>
+<div class="callout">
+<span class="label">Why castling and en passant don't need special handling here</span>
+<p>
+It might seem like checkmate/stalemate detection needs to separately ask
+"could the player escape by castling?" or "could the player escape via en
+passant?" It doesn't, for a subtle but important reason. Castling can never
+be the only way out of check, because castling is illegal while in check in
+the first place (<a href="#castling">Section 6.7</a>) — so it never needs
+special consideration for <em>checkmate</em>. En passant and castling both
+still matter for <em>stalemate</em>, though: if capturing en passant, or
+castling, is the only legal move available in an otherwise quiet position,
+the game is not a draw. Because <code class="inline">has_any_legal_move</code>
+tries every <code class="inline">(start, end)</code> pair through the same
+<code class="inline">is_legal_move</code> that already understands both
+special moves, both are automatically included in the search with no extra
+code required — a direct benefit of the "don't duplicate legality logic"
+principle carried through from the previous section.
+</p>
+</div>
+
+<h3 id="notation">6.10 &nbsp;Algebraic Notation: move_to_notation</h3>
+<p>
+The last function in the file doesn't decide anything about legality — it
+translates a move that has already happened into the short, standard text
+form chess players use to record games (<code class="inline">"e4"</code>,
+<code class="inline">"Nf3"</code>, <code class="inline">"Qxd8+"</code>,
+<code class="inline">"O-O"</code>).
+</p>
+<pre class="code"><code>def move_to_notation(piece, start_row, start_col, end_row, end_col,
+                      is_capture, promotion=None, gives_check=False, gives_mate=False,
+                      is_castle_kingside=False, is_castle_queenside=False, is_en_passant=False):
+    if is_castle_kingside:
+        notation = &quot;O-O&quot;
+    elif is_castle_queenside:
+        notation = &quot;O-O-O&quot;
+    else:
+        piece_type = piece.upper()
+        dest = square_name(end_row, end_col)
+
+        if piece_type == &#x27;P&#x27;:
+            if is_capture:
+                origin_file = col_file[start_col]
+                notation = f&quot;{origin_file}x{dest}&quot;
+            else:
+                notation = dest
+            if promotion:
+                notation += f&quot;={promotion.upper()}&quot;
+            if is_en_passant:
+                notation += &quot; e.p.&quot;
+        else:
+            notation = piece_type + (&quot;x&quot; if is_capture else &quot;&quot;) + dest
+
+    if gives_mate:
+        notation += &quot;#&quot;
+    elif gives_check:
+        notation += &quot;+&quot;
+
+    return notation</code></pre><ul>
+  <li><strong>Castling</strong> is checked first and short-circuits
+  everything else — <code class="inline">"O-O"</code> or
+  <code class="inline">"O-O-O"</code>, full stop. No piece letter,
+  destination square, or capture marker is relevant to a castling move's
+  notation.</li>
+  <li><strong>Pawns</strong> are notated without a piece letter at all — just
+  the destination square (<code class="inline">"e4"</code>), unless it's a
+  capture, in which case the pawn's <em>starting file</em> is prefixed
+  (<code class="inline">"exd5"</code>) since the destination square alone
+  wouldn't tell you which of two possible pawns made the capture.
+  Promotions append <code class="inline">"=Q"</code> (or whichever piece was
+  chosen), and en passant captures get an explanatory
+  <code class="inline">" e.p."</code> suffix — not part of standard
+  notation everywhere, but a helpful disambiguator in a game history where
+  the capture wouldn't otherwise be obvious (the destination square is
+  empty at the time of the move, for every other kind of capture that's
+  never true).</li>
+  <li><strong>Every other piece</strong> is notated as its uppercase letter,
+  optionally followed by <code class="inline">"x"</code> for a capture, then
+  the destination square — <code class="inline">"Nf3"</code>,
+  <code class="inline">"Bxc6"</code>, <code class="inline">"Qd8"</code>.</li>
+  <li><strong>Check and checkmate</strong> are appended last, after
+  everything else, as <code class="inline">"+"</code> or
+  <code class="inline">"#"</code> — and note that a move can never be both,
+  which is why this is a simple <code class="inline">if / elif</code>
+  rather than two independent conditions.</li>
+</ul>
+<p>
+This function only ever describes a move that <code class="inline">main.py</code> has already fully validated and applied — it has no
+ability to reject anything, and its only responsibility is producing text
+that accurately matches what already happened.
+</p>
+</section>
+<section id="main-py">
+<span class="section-number">07</span>
+<h2 class="section-title">main.py — The Game Loop</h2>
+<p>
+Every function discussed so far only ever answers questions or describes
+data — none of them read keyboard input, print anything to the terminal, or
+change the real board. <code class="inline">main.py</code> is where all of
+that finally happens. It is the only file that knows a human is playing,
+and its job is to turn a sequence of typed lines into a sequence of
+questions for <code class="inline">pieces.py</code>, then act on the
+answers.
+</p>
+
+<h3 id="main-imports">7.1 &nbsp;State and Setup</h3>
+<p>
+The top of the file imports exactly what it needs from each of the other
+three modules — rendering and screen control from
+<code class="inline">board.py</code>, every rules-engine function from
+<code class="inline">pieces.py</code>, and every message template it uses
+directly from <code class="inline">errors.py</code>. Nothing here duplicates
+logic that already exists elsewhere; <code class="inline">main.py</code>
+composes, it doesn't reimplement.
+</p>
+<pre class="code"><code>def main():
+    board = create_starting_board()
+    turn = &quot;White&quot;
+    move_history = []
+    undo_stack = []
+    castling_rights = default_castling_rights()
+    en_passant_target = None
+    status_message = None</code></pre><p>
+This block runs exactly once per game and establishes the six pieces of
+state the entire rest of the loop reads and mutates:
+</p>
+<ul>
+  <li><code class="inline">board</code> — the live position, starting from
+  <code class="inline">create_starting_board()</code>.</li>
+  <li><code class="inline">turn</code> — whose move it is, as the literal
+  string <code class="inline">"White"</code> or <code class="inline">"Black"</code>, flipped after every successfully completed move.</li>
+  <li><code class="inline">move_history</code> — a flat list of notation
+  strings in play order, used both for the <code class="inline">history</code>
+  command and for the "Last move" line shown every turn.</li>
+  <li><code class="inline">undo_stack</code> — a list of complete game-state
+  snapshots, one pushed just before each move is applied (see
+  <a href="#move-pipeline">Section 7.4</a>).</li>
+  <li><code class="inline">castling_rights</code> and
+  <code class="inline">en_passant_target</code> — the two pieces of history
+  a bare board can't represent, introduced in
+  <a href="#data-model">Section 3</a>.</li>
+  <li><code class="inline">status_message</code> — the single most important
+  variable for how this game feels to actually play, explained fully in the
+  next section.</li>
+</ul>
+
+<h3 id="main-loop">7.2 &nbsp;The Single-Frame Render Loop</h3>
+<p>
+Before this rewrite, every turn's board was printed directly beneath the
+previous one, so after a dozen moves the terminal held a dozen scrolling
+copies of the board — the exact problem this project asked to have fixed.
+The naive fix, "just call <code class="inline">clear_screen()</code> before
+printing the board," creates a subtler problem on its own: if an error
+message, a check notice, or a history listing is printed the moment it
+happens — partway through handling a command — then the very next loop
+iteration clears the screen again before the player has had a real chance to
+read it. The message would flash and vanish faster than a human can react.
+</p>
+<p>
+The fix used here is to never print a status message immediately. Instead,
+every command handler <em>assigns</em> a string to the
+<code class="inline">status_message</code> variable and moves on. The
+message is only actually printed once, at the very top of the next loop
+iteration, in the same "frame" as the freshly cleared, freshly drawn board —
+right before the next input prompt, where it will actually stay on screen
+until the player responds:
+</p>
+<pre class="code"><code>    while True:
+        choice = input(&quot;Promote pawn to [Q/R/B/N]: &quot;).strip().upper()
+        if choice in valid:
+            return choice
+        print(&quot;Please choose Q, R, B, or N.&quot;)
+
+
+def main():
+    board = create_starting_board()
+    turn = &quot;White&quot;
+    move_history = []
+    undo_stack = []
+    castling_rights = default_castling_rights()
+    en_passant_target = None
+    status_message = None
+
+    while True:
+        clear_screen()
+        print_board(board)
+
+        if move_history:
+            print(f&quot;Last move: {move_history[-1]}&quot;)
+        if status_message:
+            print(status_message)
+        status_message = None
+
+        print(f&quot;{turn}&#x27;s move  (type &#x27;help&#x27; for commands)&quot;)
+        raw = input(&quot;|_____ &quot;).strip()
+        command = raw.lower()</code></pre><p>
+Notice the order: clear the screen, print the board, print the last move (if
+any), print whatever <code class="inline">status_message</code> was left
+over from processing the <em>previous</em> command, then immediately reset
+it to <code class="inline">None</code> so a stale message doesn't linger
+into the following turn if nothing new sets it. Only after all of that does
+the loop print the turn prompt and call <code class="inline">input()</code> —
+which is the one point in the whole loop that actually pauses and waits for
+the player, so everything printed just before it is guaranteed to stay
+visible for as long as the player takes to respond.
+</p>
+<p>
+Checkmate and stalemate are the one deliberate exception to this pattern.
+Because the game is <em>over</em> at that point — there's no "next loop
+iteration" coming to display a final message — those two cases clear the
+screen, print the final board, and print the outcome directly, then
+<code class="inline">break</code> out of the loop immediately (see
+<a href="#checkmate-block">Section 7.4</a>).
+</p>
+<h3 id="main-commands">7.3 &nbsp;Commands</h3>
+<p>
+Every line the player types is read once as <code class="inline">raw</code>
+(with surrounding whitespace stripped) and once lowercased as
+<code class="inline">command</code>, for case-insensitive comparisons. The
+loop checks it against each known command in turn; anything that matches
+none of them falls through to being parsed as a move attempt.
+</p>
+
+<h4 id="cmd-exit">exit</h4>
+<pre class="code"><code>        if command == &#x27;exit&#x27;:
+            clear_screen()
+            print_board(board)
+            print(MSG_EXIT)
+            break</code></pre><p>
+The one command that ends the program. It's also the second place (besides
+checkmate and stalemate) that prints directly instead of going through
+<code class="inline">status_message</code> — again because there's no future
+loop iteration that will ever display a deferred message, so it clears the
+screen, shows the final board, prints the goodbye line, and
+<code class="inline">break</code>s immediately.
+</p>
+
+<h4 id="cmd-help">help</h4>
+<pre class="code"><code>        if command == &#x27;help&#x27;:
+            status_message = HELP_TEXT
+            continue</code></pre><p>
+Sets <code class="inline">status_message</code> to the full
+<code class="inline">HELP_TEXT</code> block from
+<code class="inline">errors.py</code> and lets the next loop iteration
+display it above the prompt, exactly like any other status message.
+</p>
+
+<h4 id="cmd-history">history</h4>
+<pre class="code"><code>        if command == &#x27;history&#x27;:
+            if not move_history:
+                status_message = MSG_NO_HISTORY
+            else:
+                status_message = &quot;Move history:\n&quot; + &quot;\n&quot;.join(
+                    &quot;    &quot; + line for line in format_history(move_history)
+                )
+            continue</code></pre><p>
+Builds a multi-line status message from
+<code class="inline">format_history</code> (covered in
+<a href="#save-load-undo">Section 7.5</a>), indenting each line for
+visual separation from the board above it. Because
+<code class="inline">status_message</code> is just a string, it's just as
+happy holding several newline-joined lines as it is holding a single short
+sentence — the render loop doesn't need to know or care which.
+</p>
+
+<h4 id="cmd-undo">undo</h4>
+<pre class="code"><code>        if command == &#x27;undo&#x27;:
+            if not undo_stack:
+                status_message = MSG_NOTHING_TO_UNDO
+            else:
+                board, turn, hist_len, castling_rights, en_passant_target = undo_stack.pop()
+                move_history = move_history[:hist_len]
+                status_message = MSG_MOVE_UNDONE
+            continue</code></pre><p>
+Pops the most recent snapshot off <code class="inline">undo_stack</code> and
+restores all five pieces of it at once —
+<code class="inline">board</code>, <code class="inline">turn</code>,
+<code class="inline">castling_rights</code>, and
+<code class="inline">en_passant_target</code>, plus
+<code class="inline">hist_len</code>, which is used to trim
+<code class="inline">move_history</code> back to its length at the moment
+that move was made (<code class="inline">move_history[:hist_len]</code>).
+Restoring all five together, from a single snapshot taken as one atomic
+unit, is what guarantees an undo can never leave the game in a
+half-consistent state — for example, a board rolled back one move while
+castling rights are accidentally left reflecting the undone move.
+</p>
+
+<h4 id="cmd-save-load">save [filename] / load [filename]</h4>
+<pre class="code"><code>        parts = raw.split()
+        if parts and parts[0].lower() == &#x27;save&#x27;:
+            filename = parts[1] if len(parts) &gt; 1 else DEFAULT_SAVE_FILE
+            status_message = save_game(board, turn, move_history, castling_rights,
+                                        en_passant_target, filename)
+            continue
+
+        if parts and parts[0].lower() == &#x27;load&#x27;:
+            filename = parts[1] if len(parts) &gt; 1 else DEFAULT_SAVE_FILE
+            new_board, new_turn, new_history, new_rights, new_ep, error = load_game(filename)
+            if error:
+                status_message = error
+            else:
+                board, turn, move_history = new_board, new_turn, new_history
+                castling_rights, en_passant_target = new_rights, new_ep
+                undo_stack = []
+                status_message = MSG_LOADED.format(filename=filename)
+            continue</code></pre><p>
+Both commands are recognized by splitting the raw input on whitespace and
+checking the first word — <code class="inline">parts[0].lower() == 'save'</code> — rather than the original version's
+<code class="inline">command.startswith('save')</code>, which would have
+also matched an unrelated word like <code class="inline">"savings"</code>. An
+optional second word is treated as the filename; if none is given, both
+commands fall back to <code class="inline">DEFAULT_SAVE_FILE</code>
+(<code class="inline">"chess_save.json"</code>). The actual save/load
+mechanics — what gets written, and how a load handles an older or malformed
+file — are covered in full in <a href="#save-load-undo">Section 7.5</a>.
+</p>
+
+<h4 id="cmd-castle-shorthand">O-O / O-O-O (castling shorthand)</h4>
+<pre class="code"><code>        # Castling shorthand: O-O / O-O-O (or 0-0 / 0-0-0)
+        if command in (&#x27;o-o&#x27;, &#x27;0-0&#x27;):
+            raw = &quot;e1g1&quot; if turn == &quot;White&quot; else &quot;e8g8&quot;
+        elif command in (&#x27;o-o-o&#x27;, &#x27;0-0-0&#x27;):
+            raw = &quot;e1c1&quot; if turn == &quot;White&quot; else &quot;e8c8&quot;</code></pre><p>
+Castling is fully expressible with the ordinary 4-character move format
+already — <code class="inline">e1g1</code> for White's kingside castle,
+<code class="inline">e1c1</code> queenside, and the mirror-image squares on
+the eighth rank for Black — because <code class="inline">is_legal_move</code>
+recognizes a king moving two squares as a castling attempt purely from its
+shape (<a href="#is-legal-move">Section 6.8</a>). This block is a pure
+convenience on top of that: if the player types the conventional
+<code class="inline">O-O</code> or <code class="inline">O-O-O</code>
+notation (or the digit-zero variants, <code class="inline">0-0</code> /
+<code class="inline">0-0-0</code>, common when a keyboard or habit
+substitutes zeros for capital O's), this rewrites <code class="inline">raw</code> into the exact coordinate string for whichever color is
+currently moving, and lets it fall straight through into the same move-parsing
+code every other move goes through below. No separate castling code path
+exists in the move handler at all — by the time execution reaches
+<code class="inline">move = raw.replace(" ", "")</code>, a shorthand castle
+command and a manually typed <code class="inline">e1g1</code> are already
+completely indistinguishable.
+</p>
+<h3 id="move-pipeline">7.4 &nbsp;The Move Pipeline</h3>
+<p>
+If none of the named commands matched, the raw input is treated as a move
+attempt. This is the longest, most sequential part of the file, and it's
+worth reading as a strict pipeline: each step only runs once the previous
+one has succeeded, and any failure anywhere along the way jumps straight to
+setting an error <code class="inline">status_message</code> and
+<code class="inline">continue</code>-ing back to the top of the loop.
+</p>
+
+<h4 id="move-prep">Normalizing the input</h4>
+<pre class="code"><code>        move = raw.replace(&quot; &quot;, &quot;&quot;)</code></pre><p>
+Spaces are stripped so that both <code class="inline">"e2e4"</code> and
+<code class="inline">"e2 e4"</code> (a small, forgiving touch for how
+naturally people type coordinate pairs) parse identically.
+</p>
+
+<h4 id="try-parse">Length and coordinate parsing</h4>
+<pre class="code"><code>        try:
+            if len(move) != 4:
+                status_message = f&quot;Error: {ERR_BAD_INPUT_LENGTH}&quot;
+                continue
+
+            start_row, start_col, end_row, end_col = read_coordinate(move)
+            piece = board[start_row][start_col]</code></pre><p>
+A move must be exactly 4 characters after spaces are removed — anything
+shorter or longer is rejected immediately, before
+<code class="inline">read_coordinate</code> is even called, with
+<code class="inline">ERR_BAD_INPUT_LENGTH</code>. Past that, the whole
+remainder of move handling lives inside a single <code class="inline">try</code> block, because <code class="inline">read_coordinate</code>
+can raise <code class="inline">KeyError</code> (bad file letter) or
+<code class="inline">ValueError</code> (bad or out-of-range rank), both of
+which are caught at the very end of the block (<a href="#error-handling">Section 7.6</a>) rather than checked defensively at every line in between.
+</p>
+
+<h4 id="legality-check">Asking the rules engine</h4>
+<pre class="code"><code>            legal, error_message = is_legal_move(board, start_row, start_col, end_row, end_col,
+                                                  turn, castling_rights, en_passant_target)
+            if not legal:
+                status_message = f&quot;Error: {error_message}&quot;
+                continue</code></pre><p>
+This is the one call that matters most in the entire file:
+<code class="inline">is_legal_move</code>, given the current board, the
+parsed coordinates, whose turn it is, and both pieces of extra state, either
+approves the move or explains exactly why it can't happen. If it's not
+legal, the reason is shown to the player and nothing else in the pipeline
+runs.
+</p>
+
+<h4 id="detect-special">Recognizing what kind of move this is</h4>
+<pre class="code"><code>            is_castle = (piece.lower() == &#x27;k&#x27; and start_row == end_row
+                         and abs(end_col - start_col) == 2)
+            is_en_passant = (piece.lower() == &#x27;p&#x27; and en_passant_target == (end_row, end_col)
+                              and board[end_row][end_col] == &quot;0&quot;)</code></pre><p>
+Once a move is confirmed legal, <code class="inline">main.py</code> still
+needs to know <em>which</em> of the three kinds of move it just approved, in
+order to apply the right side effects a few lines further down — moving the
+rook for a castle, removing the passed pawn for en passant. Rather than
+having <code class="inline">is_legal_move</code> return that classification
+directly, this block re-derives it with the same lightweight shape checks
+used inside <code class="inline">is_legal_move</code> itself (a king moving
+two squares; a pawn moving diagonally onto the recorded en passant target).
+Recomputing these two booleans here, cheaply and locally, keeps
+<code class="inline">is_legal_move</code>'s return type simple — always just
+<code class="inline">(bool, message)</code> — while still giving this block
+everything it needs to apply the move correctly.
+</p>
+
+<h4 id="undo-snapshot">Taking the undo snapshot</h4>
+<pre class="code"><code>            # Snapshot for undo BEFORE mutating anything
+            undo_stack.append((clone_board(board), turn, len(move_history),
+                                copy.deepcopy(castling_rights), en_passant_target))</code></pre><p>
+This line runs <em>before</em> a single square of the real board changes —
+it's the last possible moment to capture "the game exactly as it was right
+before this move," and it's what the <code class="inline">undo</code>
+command restores later. <code class="inline">clone_board(board)</code>
+guarantees the snapshot is a fully independent copy
+(<a href="#data-model">Section 3</a>), and
+<code class="inline">copy.deepcopy(castling_rights)</code> does the same for
+the nested rights dictionary — without it, the snapshot's
+<code class="inline">castling_rights</code> would just be another reference
+to the exact same dictionary <code class="inline">main.py</code> is about to
+go on mutating, and undoing a move would restore a "snapshot" that had
+already changed along with the live game.
+<code class="inline">en_passant_target</code> needs no such copying — it's
+either <code class="inline">None</code> or a plain tuple of two integers, and
+both are immutable in Python, so simply referencing it is already perfectly
+safe.
+</p>
+
+<h4 id="apply-move">Moving the piece</h4>
+<pre class="code"><code>            is_capture = board[end_row][end_col] != &quot;0&quot; or is_en_passant
+
+            if is_en_passant:
+                board[start_row][end_col] = &quot;0&quot;
+
+            board[start_row][start_col] = &quot;0&quot;
+            board[end_row][end_col] = piece
+
+            if is_castle:
+                apply_castle(board, turn, end_col)</code></pre><p>
+<code class="inline">is_capture</code> is computed before anything moves,
+and it has to account for en passant specially: an en passant capture's
+destination square is, by definition, empty (that's the entire reason the
+rule exists), so <code class="inline">board[end_row][end_col] != "0"</code>
+alone would miss it — the <code class="inline">or is_en_passant</code>
+covers that case explicitly.
+</p>
+<p>
+If this is an en passant capture, the passed pawn is removed first —
+<code class="inline">board[start_row][end_col] = "0"</code>, using the exact
+same <code class="inline">(start_row, end_col)</code> geometry explained in
+<a href="#is-legal-move">Section 6.8</a> — before the capturing pawn itself
+moves. Then the ordinary two-line move happens unconditionally for every
+kind of move: clear the starting square, place the piece on the destination.
+This is the single piece of logic that <em>every</em> move in the game runs
+through, castling and en passant included — castling's rook relocation is
+applied immediately afterward as an addition on top of this, not a
+replacement for it.
+</p>
+
+<h4 id="promotion-step">Promotion</h4>
+<p>
+<code class="inline">prompt_promotion()</code> is the one place the game
+loop pauses to ask an extra question mid-move:
+</p>
+<pre class="code"><code>def prompt_promotion():
+    valid = {&quot;Q&quot;, &quot;R&quot;, &quot;B&quot;, &quot;N&quot;}
+    while True:
+        choice = input(&quot;Promote pawn to [Q/R/B/N]: &quot;).strip().upper()
+        if choice in valid:
+            return choice
+        print(&quot;Please choose Q, R, B, or N.&quot;)</code></pre><p>
+A simple validated input loop — it will not return until the player types
+one of the four legal promotion pieces, re-prompting on anything else. Back
+in the main move-handling block:
+</p>
+<pre class="code"><code>            promotion = None
+            if piece.lower() == &#x27;p&#x27; and end_row in (0, 7):
+                promotion = prompt_promotion()
+                board[end_row][end_col] = promotion if turn == &quot;White&quot; else promotion.lower()</code></pre><p>
+A pawn that lands on row 0 or row 7 — the far side of the board for either
+color — has reached the last rank and must promote; there's no rule allowing
+a pawn to simply stop there as a pawn. The chosen letter is written onto the
+board in the correct case for the current player
+(<code class="inline">promotion if turn == "White" else promotion.lower()</code>), directly overwriting the pawn that's already sitting on that
+square from the move a few lines above.
+</p>
+
+<h4 id="update-rights">Updating castling rights and the en passant target</h4>
+<pre class="code"><code>            update_castling_rights(castling_rights, piece, start_row, start_col,
+                                    end_row, end_col, turn)</code></pre><pre class="code"><code>            new_en_passant_target = None
+            if piece.lower() == &#x27;p&#x27; and abs(end_row - start_row) == 2:
+                new_en_passant_target = ((start_row + end_row) // 2, start_col)
+            en_passant_target = new_en_passant_target</code></pre><p>
+<code class="inline">update_castling_rights</code> runs after
+<em>every</em> move, not just king or rook moves — as explained in
+<a href="#castling">Section 6.7</a>, it's the function itself that decides
+whether anything actually needs to change.
+</p>
+<p>
+The en passant target is recalculated completely fresh after every move,
+and the default is always <code class="inline">None</code> — the
+opportunity only exists for the single turn immediately following a
+two-square pawn advance, so unless <em>this exact move</em> was a
+two-square pawn advance, the target resets to nothing. When it was, the
+target square is the midpoint between the pawn's start and end row —
+<code class="inline">(start_row + end_row) // 2</code> — on the same column
+the pawn moved along. Because the row difference for a two-square advance
+is always exactly <code class="inline">±2</code>, that midpoint is always a
+whole number, landing precisely on the square the pawn skipped over.
+</p>
+
+<h4 id="check-detect">Detecting check, checkmate, and notating the move</h4>
+<pre class="code"><code>            next_turn = &quot;Black&quot; if turn == &quot;White&quot; else &quot;White&quot;
+            gives_check = is_in_check(board, next_turn)
+            gives_mate = gives_check and is_checkmate(board, next_turn, castling_rights,
+                                                       en_passant_target)</code></pre><pre class="code"><code>            is_castle_kingside = is_castle and end_col &gt; start_col
+            is_castle_queenside = is_castle and end_col &lt; start_col
+
+            notation = move_to_notation(piece, start_row, start_col, end_row, end_col,
+                                         is_capture, promotion, gives_check, gives_mate,
+                                         is_castle_kingside, is_castle_queenside, is_en_passant)</code></pre><pre class="code"><code>            move_history.append(notation)</code></pre><p>
+With the move fully applied and all state updated, the engine is asked two
+final questions about the <em>other</em> player, who is about to move next:
+is <code class="inline">next_turn</code> in check right now, and if so, do
+they have absolutely no legal reply? Both castling flags
+(<code class="inline">is_castle_kingside</code>,
+<code class="inline">is_castle_queenside</code>) are derived the same way
+as the earlier <code class="inline">is_castle</code>/<code class="inline">is_en_passant</code> detection — cheaply, from the already-known
+move, rather than threaded back out of
+<code class="inline">is_legal_move</code>. Everything gathered in this block
+— the piece, the squares, whether it captured, any promotion, whether it
+gives check or checkmate, and which special-move flags apply — is finally
+handed to <code class="inline">move_to_notation</code>
+(<a href="#notation">Section 6.10</a>) to produce the one string that gets
+permanently appended to <code class="inline">move_history</code>.
+</p>
+
+<h4 id="checkmate-block">Ending the game, or continuing it</h4>
+<pre class="code"><code>            if gives_mate:
+                clear_screen()
+                print_board(board)
+                print(f&quot;Last move: {move_history[-1]}&quot;)
+                print(MSG_CHECKMATE.format(turn=turn))
+                break</code></pre><pre class="code"><code>            if is_stalemate(board, next_turn, castling_rights, en_passant_target):
+                clear_screen()
+                print_board(board)
+                print(f&quot;Last move: {move_history[-1]}&quot;)
+                print(MSG_STALEMATE)
+                break</code></pre><pre class="code"><code>            turn = next_turn
+            if gives_check:
+                status_message = MSG_CHECK.format(turn=turn)</code></pre><p>
+Three outcomes are possible at this point, checked in order. If the move
+just delivered checkmate, the loop prints the final position directly (the
+one deliberate exception to the deferred-message pattern from
+<a href="#main-loop">Section 7.2</a>, since the game is ending right here)
+and <code class="inline">break</code>s. If it's not checkmate but the
+resulting position is a stalemate, the same direct-print-and-break pattern
+handles the draw. Otherwise, the game continues: <code class="inline">turn</code> is finally updated to <code class="inline">next_turn</code>
+— note this is the <em>only</em> place <code class="inline">turn</code> is
+reassigned in the entire pipeline, and it only happens once every other
+check has already passed — and if the new position happens to be check
+(without being checkmate), a status message is queued for the next frame
+rather than printed immediately, keeping it consistent with every other
+piece of turn feedback in the game.
+</p>
+<h3 id="save-load-undo">7.5 &nbsp;Save, Load, and the Move History</h3>
+
+<h4 id="format-history">format_history(history)</h4>
+<pre class="code"><code>def format_history(history):
+    lines = []
+    for i in range(0, len(history), 2):
+        move_no = i // 2 + 1
+        white_move = history[i]
+        black_move = history[i + 1] if i + 1 &lt; len(history) else &quot;&quot;
+        lines.append(f&quot;{move_no}. {white_move}  {black_move}&quot;.rstrip())
+    return lines</code></pre><p>
+<code class="inline">move_history</code> is stored as one flat list, White
+and Black's moves alternating —
+<code class="inline">["e4", "e5", "Nf3", "Nc6", …]</code> — because that's
+the simplest possible structure to append to during play. This function
+exists purely to reformat that flat list into the traditional
+"<code class="inline">1. e4  e5</code>" style for display, without changing
+how the data is stored. It walks the list two entries at a time
+(<code class="inline">range(0, len(history), 2)</code>), computing the move
+number as <code class="inline">i // 2 + 1</code>, and handles the case where
+White has moved but Black hasn't yet (the list has an odd number of
+entries) by defaulting the Black half to an empty string and trimming any
+resulting trailing whitespace with <code class="inline">.rstrip()</code>.
+</p>
+
+<h4 id="save-game">save_game(board, turn, history, castling_rights, en_passant_target, filename)</h4>
+<pre class="code"><code>def save_game(board, turn, history, castling_rights, en_passant_target, filename):
+    data = {
+        &quot;board&quot;: board,
+        &quot;turn&quot;: turn,
+        &quot;history&quot;: history,
+        &quot;castling_rights&quot;: castling_rights,
+        &quot;en_passant_target&quot;: list(en_passant_target) if en_passant_target else None,
+    }
+    try:
+        with open(filename, &quot;w&quot;) as f:
+            json.dump(data, f, indent=2)
+        return MSG_SAVED.format(filename=filename)
+    except OSError as e:
+        return ERR_SAVE_FAILED.format(error=e)</code></pre><p>
+Every piece of state needed to resume the game exactly where it left off is
+packed into one dictionary and written as JSON. The only value that needs
+any transformation is <code class="inline">en_passant_target</code>: JSON has
+no tuple type, so <code class="inline">(row, col)</code> is converted to a
+plain <code class="inline">[row, col]</code> list before saving (and back
+again on load, below) — and if there's currently no target,
+<code class="inline">None</code> is saved as JSON <code class="inline">null</code> directly. <code class="inline">castling_rights</code>, being
+already just nested dictionaries of strings and booleans, needs no special
+handling at all; <code class="inline">json.dump</code> serializes it as-is.
+Rather than printing anything directly, this function <em>returns</em> the
+resulting message string — success or failure — so its caller in the main
+loop can hand it to <code class="inline">status_message</code> like every
+other piece of feedback in the game.
+</p>
+
+<h4 id="load-game">load_game(filename)</h4>
+<pre class="code"><code>def load_game(filename):
+    try:
+        with open(filename, &quot;r&quot;) as f:
+            data = json.load(f)
+        board = data[&quot;board&quot;]
+        turn = data[&quot;turn&quot;]
+        history = data[&quot;history&quot;]
+        castling_rights = data.get(&quot;castling_rights&quot;, default_castling_rights())
+        ep = data.get(&quot;en_passant_target&quot;)
+        en_passant_target = tuple(ep) if ep else None
+        return board, turn, history, castling_rights, en_passant_target, None
+    except (OSError, json.JSONDecodeError, KeyError) as e:
+        return None, None, None, None, None, ERR_LOAD_FAILED.format(error=e)</code></pre><p>
+The reverse operation, with one deliberate compatibility feature:
+<code class="inline">data.get("castling_rights", default_castling_rights())</code> and <code class="inline">data.get("en_passant_target")</code>
+both use dictionary <code class="inline">.get()</code> with a fallback rather
+than direct key access. This means a save file written by an older version
+of this project — one that predates castling and en passant, and so never
+wrote those keys at all — can still be loaded successfully: it simply falls
+back to fresh, full castling rights and no pending en passant target, rather
+than crashing with a <code class="inline">KeyError</code> on a key that
+simply doesn't exist in an old file. The tuple conversion for the en passant
+target is the exact mirror of the one in
+<code class="inline">save_game</code>: a JSON list, if present, is turned
+back into a tuple; <code class="inline">null</code>/missing becomes
+<code class="inline">None</code>.
+</p>
+<p>
+On any failure — the file doesn't exist, it isn't valid JSON, or it's
+missing one of the three genuinely required keys
+(<code class="inline">board</code>, <code class="inline">turn</code>,
+<code class="inline">history</code>) — the function returns a 6-tuple of
+<code class="inline">None</code>s followed by an error string, rather than
+raising. The caller in the main loop checks that error slot first and only
+unpacks the rest of the state if it's empty, which keeps a failed load from
+ever partially overwriting a game already in progress.
+</p>
+
+<h3 id="error-handling">7.6 &nbsp;Error Handling</h3>
+<pre class="code"><code>        except KeyError:
+            status_message = f&quot;Error: {ERR_BAD_FILE}&quot;
+        except ValueError:
+            status_message = f&quot;Error: {ERR_BAD_RANK}&quot;
+        except Exception as e:
+            status_message = f&quot;Error: {ERR_UNEXPECTED.format(error=e)}&quot;</code></pre><p>
+Three <code class="inline">except</code> clauses catch everything that can
+go wrong while parsing and applying a move, from most specific to least:
+</p>
+<ul>
+  <li><strong><code class="inline">KeyError</code></strong> — raised by
+  <code class="inline">read_coordinate</code> when a file letter isn't
+  <code class="inline">A</code> through <code class="inline">H</code>
+  (<a href="#read-coordinate">Section 6.1</a>). Reported as
+  <code class="inline">ERR_BAD_FILE</code>.</li>
+  <li><strong><code class="inline">ValueError</code></strong> — raised by
+  the same function when a rank character isn't a digit, or is a digit
+  outside <code class="inline">1</code>–<code class="inline">8</code>.
+  Reported as <code class="inline">ERR_BAD_RANK</code>.</li>
+  <li><strong>Any other <code class="inline">Exception</code></strong> — a
+  deliberately broad final safety net. Nothing in normal play should ever
+  reach this branch, but if some combination of edge cases the rest of this
+  document didn't anticipate ever does slip through, this turns what would
+  otherwise be a full crash — dumping a Python traceback and ending the
+  program — into a readable, in-game error message that lets the player
+  simply try a different move instead of losing the whole session.</li>
+</ul>
+<p>
+Every branch sets <code class="inline">status_message</code> rather than
+printing directly, keeping error handling consistent with every other kind
+of feedback in the game — the player always sees exactly one clean frame per
+turn, whether that turn ended in a successful move, a rejected one, or a
+genuine unexpected error.
+</p>
+</section>
+<section id="rules-reference">
+<span class="section-number">08</span>
+<h2 class="section-title">Chess Rules Reference</h2>
+<p>
+The previous two sections explained the code by following its structure.
+This section inverts that: it's organized by <em>chess rule</em>, as a
+standalone reference, with a pointer back to exactly where each rule lives
+in the code. Use it as a checklist while rebuilding the project
+(<a href="#rebuild-guide">Section 10</a>), or as a quick lookup for "where is
+the rule that says…".
+</p>
+
+<h3>Piece movement</h3>
+<table>
+<thead><tr><th>Piece</th><th>Moves</th><th>Captures</th><th>Implemented in</th></tr></thead>
+<tbody>
+<tr><td>Pawn</td><td>One square straight ahead (two from its starting rank); never sideways or backward</td><td>One square diagonally ahead only — never straight ahead</td><td><a href="#pawn-logic"><code class="inline">pawn_check</code></a></td></tr>
+<tr><td>Knight</td><td>An L-shape: two squares in one direction, then one square perpendicular</td><td>Same as its move; the only piece that ignores blocking pieces along the way</td><td><a href="#movement-legality"><code class="inline">can_piece_reach</code></a></td></tr>
+<tr><td>Bishop</td><td>Any number of squares along one diagonal</td><td>Same as its move</td><td><a href="#movement-legality"><code class="inline">can_piece_reach</code></a> + <a href="#geometry-helpers"><code class="inline">path_check</code></a></td></tr>
+<tr><td>Rook</td><td>Any number of squares along one rank or file</td><td>Same as its move</td><td><a href="#movement-legality"><code class="inline">can_piece_reach</code></a> + <a href="#geometry-helpers"><code class="inline">path_check</code></a></td></tr>
+<tr><td>Queen</td><td>Any number of squares along a rank, file, or diagonal</td><td>Same as its move</td><td><a href="#movement-legality"><code class="inline">can_piece_reach</code></a></td></tr>
+<tr><td>King</td><td>One square in any direction (plus the special castling move)</td><td>Same as its ordinary move</td><td><a href="#movement-legality"><code class="inline">can_piece_reach</code></a> + <a href="#castling">castling rules</a></td></tr>
+</tbody>
+</table>
+
+<h3>Check, checkmate, and stalemate</h3>
+<ul>
+  <li><strong>Check</strong> — a king is in check if any enemy piece could
+  legally move onto its square on its next turn. A player in check must
+  make a move that gets out of check; no other move is legal, even one that
+  would otherwise be perfectly valid. This constraint isn't a separate rule
+  in the code — it falls directly out of the self-check simulation every
+  move already goes through (<a href="#is-legal-move"><code class="inline">is_legal_move</code></a>'s final step), since a move that
+  fails to address an existing check by definition still leaves the king in
+  check afterward.</li>
+  <li><strong>Checkmate</strong> — in check, with no legal move available at
+  all. The game ends immediately; the player who delivered mate wins. See
+  <a href="#checkmate-stalemate"><code class="inline">is_checkmate</code></a>.</li>
+  <li><strong>Stalemate</strong> — <em>not</em> in check, but still no legal
+  move available. The game ends immediately as a draw — nobody wins. This is
+  one of the rules newcomers to chess most often get wrong, since it feels
+  like it should favor whoever isn't in trouble, but a player with no
+  legal moves at all draws the game regardless of material or position. See
+  <a href="#checkmate-stalemate"><code class="inline">is_stalemate</code></a>.</li>
+</ul>
+
+<h3>Castling — all five conditions</h3>
+<p>
+Castling is a single move of the king two squares toward one of its rooks,
+with that rook simultaneously jumping to the square the king passed over.
+It is legal only if <em>every one</em> of these five conditions holds:
+</p>
+<ol>
+  <li>Neither the king nor that specific rook has moved at any earlier point
+  in the game.</li>
+  <li>There are no pieces of any kind between the king and that rook.</li>
+  <li>The king is not currently in check.</li>
+  <li>The square the king passes over is not attacked by an enemy piece.</li>
+  <li>The square the king lands on is not attacked by an enemy piece.</li>
+</ol>
+<p>
+All five are checked, in this exact order, in
+<a href="#is-legal-castle"><code class="inline">is_legal_castle</code></a>.
+Note that condition 1 is about <em>history</em>, not the current position —
+which is exactly why <a href="#data-model"><code class="inline">castling_rights</code></a> has to be tracked as separate state rather than
+derived by looking at where the king and rook currently sit.
+</p>
+
+<h3>En passant</h3>
+<p>
+If a pawn advances two squares from its starting rank and, in doing so,
+lands directly beside an enemy pawn, that enemy pawn may capture it "in
+passing" — moving diagonally onto the square the advancing pawn skipped
+over, exactly as though it had only moved one square. Two conditions make
+this rule unusual compared to every other capture in chess:
+</p>
+<ul>
+  <li>It is only legal on the <strong>very next move</strong>. If the
+  opportunity isn't taken immediately, it's gone for the rest of the game —
+  represented here by <a href="#data-model"><code class="inline">en_passant_target</code></a> being recalculated fresh, and
+  almost always reset to <code class="inline">None</code>, after every
+  single move.</li>
+  <li>The captured pawn is removed from a square the capturing pawn never
+  actually lands on — worked through in detail in
+  <a href="#is-legal-move">Section 6.8</a>.</li>
+</ul>
+
+<h3>Pawn promotion</h3>
+<p>
+A pawn that reaches the far side of the board (the last rank for its color)
+must immediately become a queen, rook, bishop, or knight of the same color —
+never remain a pawn, and never become a king. Handled in
+<a href="#promotion-step">Section 7.4</a>, where reaching row 0 or row 7
+triggers an immediate, blocking prompt for the player's choice before the
+turn can finish.
+</p>
+</section>
+<section id="bugs-fixed">
+<span class="section-number">09</span>
+<h2 class="section-title">What Was Broken, and What Was Fixed</h2>
+<p>
+This restructure started from a working-looking codebase with one
+game-breaking symptom: typing the opening move <code class="inline">e2e4</code> always failed with "It is White's turn right now. This is not
+your piece" — even on the very first move of a new game, as White. This
+section summarizes, at a level appropriate for a changelog rather than a
+full deep-dive, what was actually wrong and why that particular symptom
+appeared. The rest of this document describes the corrected code, not the
+broken version, so treat this section as historical context rather than
+something you need to hold in mind while reading everything above it.
+</p>
+
+<h3>The root cause: a swapped argument order</h3>
+<p>
+The function that answers "whose piece is on this square" was defined to
+accept its coordinates as <code class="inline">(board, col, row)</code>, but
+the code path handling a normal move called it as
+<code class="inline">(board, row, col)</code> — passing a piece's row where
+a column was expected, and vice versa. For most starting positions those two
+numbers differ, so the lookup silently landed on a completely different,
+usually empty, square. An empty square has no color, so the check "is this
+your piece" always failed, no matter what the player actually typed. This is
+the single change described throughout <a href="#pieces-py">Section 6</a>:
+every function in the rewritten <code class="inline">pieces.py</code> now
+consistently takes <code class="inline">(row, col)</code>, in that order,
+matching <code class="inline">board[row][col]</code> indexing exactly, with
+no exceptions anywhere in the file.</p>
+
+<h3>Related issues fixed at the same time</h3>
+<ul>
+  <li><strong>Inconsistent return types.</strong> Several movement-rule
+  branches returned a bare <code class="inline">False</code> instead of a
+  <code class="inline">(False, reason)</code> tuple. Once the argument-order
+  bug above was fixed, code that scans the board for check detection would
+  have started calling those exact branches and crashed trying to unpack a
+  plain boolean as a two-item tuple. Every legality-checking function now
+  returns <code class="inline">(bool, message)</code> unconditionally.</li>
+  <li><strong>Messages printed from deep inside silent scans.</strong>
+  Rejection reasons were printed directly from inside the movement-checking
+  logic, which is also reused, thousands of times a turn, purely to test
+  hypothetical moves while searching for checkmate or stalemate. Left as-is,
+  every such scan would have spammed the terminal with irrelevant messages
+  about pieces that were never actually being moved by the player. Messages
+  are now always returned as data and only ever printed by
+  <code class="inline">main.py</code>, and only for the player's own move
+  attempt.</li>
+  <li><strong>Silent wraparound on invalid ranks.</strong> A typo like
+  <code class="inline">e9e4</code> converted the rank <code class="inline">9</code> into row index <code class="inline">-1</code>, which
+  Python quietly interprets as "the last row" instead of raising an error —
+  silently operating on the wrong square rather than failing loudly.
+  <code class="inline">read_coordinate</code> now explicitly validates that
+  both ranks fall within 1–8.</li>
+  <li><strong>The scrolling-terminal problem.</strong> Not a logic bug, but
+  a real usability issue: the board was printed anew below the previous one
+  every turn, with nothing ever clearing the screen. Solved by
+  <code class="inline">clear_screen()</code> plus the deferred
+  <code class="inline">status_message</code> pattern described in full in
+  <a href="#main-loop">Section 7.2</a>.</li>
+</ul>
+</section>
+<section id="rebuild-guide">
+<span class="section-number">10</span>
+<h2 class="section-title">Rebuilding This Project From Zero</h2>
+<p>
+This is the order the authors would recommend actually <em>building</em>
+this project in, as opposed to the order this document has explained it in.
+Each step produces something you can run and test before moving to the
+next — the goal is to never be more than a few minutes away from a working
+program, even in the middle of the build.
+</p>
+
+<ol class="steps">
+<li>
+<h4>Represent the board and print it</h4>
+<p>
+Start with nothing but <code class="inline">create_starting_board</code> and
+<code class="inline">print_board</code> from <a href="#board-py">Section
+4</a>. Get an 8×8 grid of characters on screen that looks like a chess
+board, with correct rank and file labels. Don't write a single rule yet —
+just confirm you can represent and display a position.
+</p>
+</li>
+<li>
+<h4>Parse a coordinate pair</h4>
+<p>
+Write <code class="inline">read_coordinate</code>
+(<a href="#read-coordinate">Section 6.1</a>) and prove, with a few quick
+manual tests, that <code class="inline">"e2e4"</code> maps to the row/column
+indices you expect, that <code class="inline">"a1"</code>-style corners map
+correctly, and that obviously bad input (a rank of 9, a file of Z) raises an
+error instead of silently producing a wrong-but-valid-looking index.
+</p>
+</li>
+<li>
+<h4>Write movement rules with no legality checking around them yet</h4>
+<p>
+Build <code class="inline">can_piece_reach</code>
+(<a href="#movement-legality">Section 6.3</a>) and
+<code class="inline">pawn_check</code>
+(<a href="#pawn-logic">Section 6.4</a>) one piece at a time. Test each piece
+in isolation, on an otherwise empty board, before combining them: does a
+knight recognize every one of its eight possible destination squares from
+the center of the board? Does a rook correctly refuse to jump over an
+occupied square?</p>
+</li>
+<li>
+<h4>Add turn tracking and "no capturing your own piece"</h4>
+<p>
+Introduce the color-based checks — <code class="inline">color_check</code>
+(<a href="#color-check">Section 6.1</a>) and the turn/friendly-fire logic
+that later becomes part of <code class="inline">is_legal_move</code>
+(<a href="#is-legal-move">Section 6.8</a>). At this point you have a game
+that enforces piece movement and turn order, but not check.
+</p>
+</li>
+<li>
+<h4>Detect check</h4>
+<p>
+Build <code class="inline">find_king</code>,
+<code class="inline">is_square_attacked</code>, and
+<code class="inline">is_in_check</code>
+(<a href="#check-detection">Section 6.5</a>), in that order. Test this
+independently of move legality: construct a few small, hand-built board
+positions (a handful of pieces, not a full starting position) where you
+know by inspection whether a king is under attack, and confirm the code
+agrees.
+</p>
+</li>
+<li>
+<h4>Prevent moving into (or leaving your king in) check</h4>
+<p>
+This is the step that requires the "clone, try, inspect, discard" pattern —
+<code class="inline">simulate_move</code>
+(<a href="#simulating-moves">Section 6.6</a>) — wired into
+<code class="inline">is_legal_move</code>'s final check. Test it with a
+classic pin: a rook or bishop directly between its own king and an enemy
+rook or queen on the same line should be unable to step off that line.
+</p>
+</li>
+<li>
+<h4>Detect checkmate and stalemate</h4>
+<p>
+Write <code class="inline">has_any_legal_move</code>
+(<a href="#checkmate-stalemate">Section 6.9</a>) as a brute-force search over
+every possible move, and build checkmate and stalemate as the two
+combinations of "in check" and "has any legal move." Test against a couple
+of well-known short mates (Fool's Mate is four moves and easy to type in by
+hand) and at least one hand-built stalemate position.
+</p>
+</li>
+<li>
+<h4>Build the game loop and basic commands</h4>
+<p>
+This is where <code class="inline">main.py</code>'s skeleton comes together
+— reading input, calling <code class="inline">is_legal_move</code>, applying
+approved moves, and switching turns (<a href="#main-py">Section 7</a>,
+skipping castling and en passant for now). Add <code class="inline">help</code>, <code class="inline">history</code>, and
+<code class="inline">exit</code> before anything more advanced.
+</p>
+</li>
+<li>
+<h4>Add algebraic notation and move history</h4>
+<p>
+Write <code class="inline">move_to_notation</code>
+(<a href="#notation">Section 6.10</a>) and
+<code class="inline">format_history</code>
+(<a href="#format-history">Section 7.5</a>). This is a good moment to play a
+short full game manually and check the resulting move list reads the way
+you'd expect it to in any standard chess notation.
+</p>
+</li>
+<li>
+<h4>Add undo, save, and load</h4>
+<p>
+Build the undo stack and the JSON-based
+<code class="inline">save_game</code>/<code class="inline">load_game</code>
+pair (<a href="#save-load-undo">Section 7.5</a>). Undo is the more
+instructive of the two to get right, because it forces you to think
+precisely about exactly which pieces of state make up "the game" at any
+given instant — get that list wrong here and it will bite you again the
+moment you add castling rights in the next step.
+</p>
+</li>
+<li>
+<h4>Add castling</h4>
+<p>
+Introduce <code class="inline">castling_rights</code> as new state, then
+build <code class="inline">is_legal_castle</code>,
+<code class="inline">apply_castle</code>, and
+<code class="inline">update_castling_rights</code> together
+(<a href="#castling">Section 6.7</a>). Test all five legality conditions
+independently — moved king, moved rook, blocked path, castling out of
+check, castling through check, and castling into check should each be their
+own hand-built test position.
+</p>
+</li>
+<li>
+<h4>Add en passant</h4>
+<p>
+Introduce <code class="inline">en_passant_target</code> as new state,
+recalculated after every move, and extend
+<code class="inline">is_legal_move</code> to recognize and validate an en
+passant attempt (<a href="#is-legal-move">Section 6.8</a>). Test the timing
+rule specifically: set up the capture opportunity, play an unrelated move
+instead of taking it, and confirm the capture is no longer available on the
+following turn.
+</p>
+</li>
+<li>
+<h4>Centralize every message</h4>
+<p>
+Once the rules are all in place and every rejection reason has stabilized,
+sweep the codebase for every string literal used as a rejection or status
+message and move it into a dedicated module (<a href="#errors-py">Section
+5</a>), importing named constants everywhere they're used instead. Doing
+this last, after the logic is done, means you're only ever moving finished,
+correct text — not trying to design and centralize messages for rules you
+haven't written yet.
+</p>
+</li>
+<li>
+<h4>Polish the terminal experience</h4>
+<p>
+Last: add <code class="inline">clear_screen()</code> and the deferred
+<code class="inline">status_message</code> pattern
+(<a href="#main-loop">Section 7.2</a>) so the terminal always shows exactly
+one current board instead of a scrolling transcript. This is deliberately
+the final step, because it's a presentation concern layered on top of a
+game loop that already works correctly — there's no reason to fight with
+screen-clearing timing while you're still debugging castling.
+</p>
+</li>
+</ol>
+</section>
+<section id="function-index">
+<span class="section-number">11</span>
+<h2 class="section-title">Appendix: Full Function Index</h2>
+<p>
+Every function in the project, in file order, with a one-line summary and a
+link back to its full explanation.
+</p>
+
+<h3>board.py</h3>
+<table>
+<thead><tr><th>Function</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><a href="#create-starting-board"><code class="inline">create_starting_board()</code></a></td><td>Returns a fresh board set to the standard chess starting position.</td></tr>
+<tr><td><a href="#clear-screen"><code class="inline">clear_screen()</code></a></td><td>Clears the terminal so exactly one board is ever visible.</td></tr>
+<tr><td><a href="#print-board"><code class="inline">print_board(board)</code></a></td><td>Prints the board with rank/file labels.</td></tr>
+<tr><td><a href="#clone-board"><code class="inline">clone_board(board)</code></a></td><td>Deep-copies a board into a fully independent snapshot.</td></tr>
+</tbody>
+</table>
+
+<h3>errors.py</h3>
+<table>
+<thead><tr><th>Contents</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><a href="#errors-full">Message constants (<code class="inline">ERR_*</code> / <code class="inline">MSG_*</code>) and <code class="inline">HELP_TEXT</code></a></td><td>Every user-facing string in the game, in one place.</td></tr>
+</tbody>
+</table>
+
+<h3>pieces.py</h3>
+<table>
+<thead><tr><th>Function</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><a href="#default-castling-rights"><code class="inline">default_castling_rights()</code></a></td><td>Returns a fresh castling-rights dictionary, both sides available.</td></tr>
+<tr><td><a href="#read-coordinate"><code class="inline">read_coordinate(coord)</code></a></td><td>Parses <code class="inline">"e2e4"</code>-style text into board row/column indices.</td></tr>
+<tr><td><a href="#square-name"><code class="inline">square_name(row, col)</code></a></td><td>Converts row/column indices back into algebraic text like <code class="inline">"e4"</code>.</td></tr>
+<tr><td><a href="#color-check"><code class="inline">color_check(board, row, col)</code></a></td><td>Returns <code class="inline">"White"</code>, <code class="inline">"Black"</code>, or <code class="inline">None</code> for a square.</td></tr>
+<tr><td><a href="#sign"><code class="inline">_sign(x)</code></a></td><td>Returns -1, 0, or 1 — the direction of a number.</td></tr>
+<tr><td><a href="#path-check"><code class="inline">path_check(board, ...)</code></a></td><td>True if every square strictly between two points is empty.</td></tr>
+<tr><td><a href="#movement-legality"><code class="inline">can_piece_reach(board, ...)</code></a></td><td>Turn-agnostic movement legality for any piece — the core of both move validation and attack detection.</td></tr>
+<tr><td><a href="#pawn-logic"><code class="inline">pawn_check(board, ...)</code></a></td><td>Pawn-specific movement rules (direction, double-step, diagonal capture).</td></tr>
+<tr><td><a href="#find-king"><code class="inline">find_king(board, color)</code></a></td><td>Scans the board for a color's king.</td></tr>
+<tr><td><a href="#is-square-attacked"><code class="inline">is_square_attacked(board, row, col, by_color)</code></a></td><td>True if any piece of <code class="inline">by_color</code> could reach that square.</td></tr>
+<tr><td><a href="#is-in-check"><code class="inline">is_in_check(board, color)</code></a></td><td>True if that color's king is currently attacked.</td></tr>
+<tr><td><a href="#simulate-move"><code class="inline">simulate_move(board, ...)</code></a></td><td>Returns a cloned board with one ordinary move applied.</td></tr>
+<tr><td><a href="#simulate-en-passant"><code class="inline">simulate_en_passant(board, ...)</code></a></td><td>Returns a cloned board with an en passant capture applied.</td></tr>
+<tr><td><a href="#is-legal-castle"><code class="inline">is_legal_castle(board, turn, ...)</code></a></td><td>Checks all five castling conditions.</td></tr>
+<tr><td><a href="#apply-castle"><code class="inline">apply_castle(board, turn, end_col)</code></a></td><td>Relocates the rook after the king has already moved.</td></tr>
+<tr><td><a href="#update-castling-rights"><code class="inline">update_castling_rights(castling_rights, ...)</code></a></td><td>Revokes castling rights after a king/rook move or a rook capture.</td></tr>
+<tr><td><a href="#is-legal-move"><code class="inline">is_legal_move(board, ..., turn, castling_rights, en_passant_target)</code></a></td><td>The single entry point: is this move legal right now?</td></tr>
+<tr><td><a href="#has-any-legal-move"><code class="inline">has_any_legal_move(board, color, ...)</code></a></td><td>True if this color has any legal move at all, of any kind.</td></tr>
+<tr><td><a href="#is-checkmate"><code class="inline">is_checkmate(board, color, ...)</code></a></td><td>In check, with no legal move.</td></tr>
+<tr><td><a href="#is-stalemate"><code class="inline">is_stalemate(board, color, ...)</code></a></td><td>Not in check, but no legal move — a draw.</td></tr>
+<tr><td><a href="#notation"><code class="inline">move_to_notation(piece, ...)</code></a></td><td>Converts a completed move into algebraic notation text.</td></tr>
+</tbody>
+</table>
+
+<h3>main.py</h3>
+<table>
+<thead><tr><th>Function</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><a href="#format-history"><code class="inline">format_history(history)</code></a></td><td>Formats the flat move list into numbered "1. e4  e5" pairs.</td></tr>
+<tr><td><a href="#save-game"><code class="inline">save_game(board, ...)</code></a></td><td>Writes the full game state to a JSON file.</td></tr>
+<tr><td><a href="#load-game"><code class="inline">load_game(filename)</code></a></td><td>Reads a JSON save file back into game state, with backward-compatible defaults.</td></tr>
+<tr><td><a href="#promotion-step"><code class="inline">prompt_promotion()</code></a></td><td>Blocks until the player types a valid promotion piece.</td></tr>
+<tr><td><a href="#main-py"><code class="inline">main()</code></a></td><td>The game loop: reads commands, drives the whole turn pipeline.</td></tr>
+</tbody>
+</table>
+</section>
+<section id="extensions">
+<span class="section-number">12</span>
+<h2 class="section-title">Where To Go From Here</h2>
+<p>
+The rules engine in this project is complete — every standard chess rule is
+implemented and enforced, including the two everyone forgets. Everything
+below is optional, roughly ordered from smallest to most involved, for
+anyone who wants to keep extending it rather than treat it as finished.
+</p>
+<ul>
+  <li><strong>Draw by repetition and the fifty-move rule.</strong> Both
+  require tracking history beyond just the current position — a running
+  count of positions seen (for threefold repetition) or of moves since the
+  last capture or pawn move (for the fifty-move rule). Neither is
+  implemented here; this project currently only recognizes checkmate and
+  stalemate as ways a game can end.</li>
+  <li><strong>Move disambiguation in notation.</strong> Real algebraic
+  notation adds a file or rank to a piece letter when two identical pieces
+  could both legally reach the same square (<code class="inline">"Nbd7"</code> when two knights could both move to d7). <code class="inline">move_to_notation</code> doesn't currently check for this
+  ambiguity.</li>
+  <li><strong>Unicode piece glyphs.</strong> Swapping the plain-letter board
+  for the standard chess Unicode characters (♔♕♖♗♘♙ and their black
+  counterparts) in <code class="inline">print_board</code> is a small,
+  purely cosmetic change that makes the board considerably more readable at
+  a glance.</li>
+  <li><strong>A PGN export.</strong> <code class="inline">move_history</code>
+  already contains everything needed to write a standard, shareable PGN
+  file — it's mostly a formatting exercise on top of data that already
+  exists.</li>
+  <li><strong>An actual opponent.</strong> Nothing in
+  <code class="inline">pieces.py</code> assumes a human is making decisions
+  — <code class="inline">has_any_legal_move</code>'s exhaustive search
+  already enumerates every legal move for a color, which is exactly the
+  starting point a simple minimax or random-move AI would build on.</li>
+  <li><strong>A different interface.</strong> Because
+  <code class="inline">pieces.py</code> has no dependency on the terminal at
+  all, it could sit unchanged behind a graphical board, a web frontend, or
+  an automated test harness — only <code class="inline">main.py</code> would
+  need to be replaced.</li>
+</ul>
+</section>
+
+</main>
+
+</div>
+
+<div class="shell">
+  <div></div>
+  <footer class="page-footer">
+    <p>
+      This document describes a teaching project: a complete, dependency-free
+      terminal chess implementation in Python. It is intentionally long, because
+      its purpose is to be read start to finish and used as a build guide, not
+      skimmed as a quick reference.
+    </p>
+  </footer>
+</div>
+
+</body>
+</html>
