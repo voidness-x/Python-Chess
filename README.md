@@ -299,6 +299,3 @@ The current rules engine can be extended with:
 
 Because the terminal-specific logic is isolated in `main.py`, these extensions can be built without rewriting the core movement rules.
 
-## License
-
-No license information is specified in the original project documentation.
